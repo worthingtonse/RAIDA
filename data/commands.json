@@ -1,0 +1,213 @@
+{
+  "version": "1.0",
+  "commands": [
+    {
+      "group": 0,
+      "code": 0,
+      "name": "Echo",
+      "description": "Test connection and encryption",
+      "encryption_required": false,
+      "request_body_size": 18,
+      "response_has_body": false,
+      "token_record_size": 0,
+      "transport": "UDP"
+    },
+    {
+      "group": 0,
+      "code": 1,
+      "name": "Version",
+      "description": "Get RAIDA software version",
+      "encryption_required": false,
+      "request_body_size": 18,
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "UDP"
+    },
+    {
+      "group": 1,
+      "code": 10,
+      "name": "Detect",
+      "description": "Verify token authenticity without changing AN",
+      "encryption_required": true,
+      "request_body_size": "18 + (21 * N)",
+      "response_has_body": "conditional",
+      "token_record_size": 21,
+      "transport": "UDP"
+    },
+    {
+      "group": 1,
+      "code": 11,
+      "name": "DetectSum",
+      "description": "Detect with checksum optimization",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": "conditional",
+      "token_record_size": 21,
+      "transport": "UDP"
+    },
+    {
+      "group": 1,
+      "code": 20,
+      "name": "Pown",
+      "description": "Change token ownership by replacing AN with PAN",
+      "encryption_required": true,
+      "request_body_size": "18 + (37 * N)",
+      "response_has_body": "conditional",
+      "token_record_size": 37,
+      "transport": "UDP"
+    },
+    {
+      "group": 1,
+      "code": 21,
+      "name": "PownSum",
+      "description": "Pown with checksum optimization",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": "conditional",
+      "token_record_size": 37,
+      "transport": "UDP"
+    },
+    {
+      "group": 2,
+      "code": 40,
+      "name": "GetTicket",
+      "description": "Get healing ticket for token recovery",
+      "encryption_required": true,
+      "request_body_size": "18 + (21 * N)",
+      "response_has_body": true,
+      "token_record_size": 21,
+      "transport": "UDP"
+    },
+    {
+      "group": 2,
+      "code": 50,
+      "name": "ValidateTicket",
+      "description": "Validate a healing ticket",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "UDP"
+    },
+    {
+      "group": 2,
+      "code": 60,
+      "name": "Find",
+      "description": "Find token by AN or PAN",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "UDP"
+    },
+    {
+      "group": 2,
+      "code": 80,
+      "name": "Fix",
+      "description": "Fix fractured token using tickets",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "UDP"
+    },
+    {
+      "group": 8,
+      "code": 82,
+      "name": "Put",
+      "description": "Store tokens in a locker",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "TCP"
+    },
+    {
+      "group": 8,
+      "code": 83,
+      "name": "Peek",
+      "description": "View locker contents without removing",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "UDP"
+    },
+    {
+      "group": 8,
+      "code": 84,
+      "name": "Remove",
+      "description": "Remove tokens from locker",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "UDP"
+    },
+    {
+      "group": 9,
+      "code": 91,
+      "name": "GetAvailableSNs",
+      "description": "Get available serial numbers for denomination change",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "UDP"
+    },
+    {
+      "group": 9,
+      "code": 92,
+      "name": "Break",
+      "description": "Break larger denomination into smaller ones",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "UDP"
+    },
+    {
+      "group": 9,
+      "code": 93,
+      "name": "Join",
+      "description": "Join smaller denominations into larger one",
+      "encryption_required": true,
+      "request_body_size": "variable",
+      "response_has_body": true,
+      "token_record_size": 0,
+      "transport": "UDP"
+    }
+  ],
+  "status_codes": {
+    "success": {
+      "241": "ALL_PASS",
+      "242": "ALL_FAIL",
+      "243": "MIXED",
+      "250": "SUCCESS"
+    },
+    "header_errors": {
+      "1": "INVALID_CLOUD_ID",
+      "2": "INVALID_SPLIT_ID",
+      "3": "INVALID_RAIDA_ID",
+      "4": "INVALID_SHARD_ID",
+      "5": "INVALID_COMMAND_GROUP",
+      "6": "INVALID_COMMAND",
+      "7": "INVALID_TOKEN_ID",
+      "16": "INVALID_PACKET_LENGTH",
+      "17": "UDP_FRAME_TIMEOUT",
+      "18": "WRONG_RAIDA",
+      "25": "ENCRYPTION_TOKEN_NOT_FOUND",
+      "27": "INVALID_ENCRYPTION_CODE",
+      "33": "INVALID_EOF",
+      "37": "INVALID_CRC",
+      "40": "INVALID_SN_OR_DENOMINATION"
+    },
+    "service_errors": {
+      "160": "CHANGE_LIMIT",
+      "179": "LOCKER_EMPTY",
+      "252": "INTERNAL_ERROR",
+      "253": "NETWORK_ERROR",
+      "254": "MEMORY_ERROR"
+    }
+  }
+}

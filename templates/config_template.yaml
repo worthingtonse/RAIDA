@@ -1,0 +1,85 @@
+# RAIDA Client Configuration Template
+# Copy this file and modify for your environment
+
+# Network settings
+network:
+  # RAIDA server list (override defaults)
+  servers:
+    # Uncomment to use custom servers
+    # - id: 0
+    #   hostname: raida0.example.com
+    #   udp_port: 18000
+    #   tcp_port: 19000
+
+  # Timeout settings (milliseconds)
+  timeouts:
+    udp_default: 3000
+    udp_retry: 4500
+    tcp_connect: 5000
+    tcp_read: 10000
+
+  # Retry settings
+  retries:
+    max_attempts: 3
+    backoff_multiplier: 1.5
+
+  # Transport selection
+  transport:
+    # Maximum UDP payload before switching to TCP
+    udp_max_bytes: 1400
+    # Prefer TCP for these commands (by code)
+    prefer_tcp: [82]  # Put command
+
+# Consensus settings
+consensus:
+  required: 13           # Minimum RAIDA for consensus
+  total_raida: 25       # Total RAIDA servers
+
+# Logging settings
+logging:
+  level: INFO           # DEBUG, INFO, WARNING, ERROR
+  file: logs/raida.log
+  max_size_mb: 10
+  backup_count: 5
+
+  # What to log
+  log_requests: true
+  log_responses: true
+  log_timing: true
+
+  # Security: never log these
+  redact:
+    - ans              # Authenticity numbers
+    - pans             # Proposed ANs
+    - keys             # Encryption keys
+
+# Storage settings
+storage:
+  wallet_path: ./wallet
+  token_format: binary  # binary, json
+  backup_enabled: true
+  backup_path: ./backup
+
+# Performance settings
+performance:
+  # Parallel request handling
+  parallel:
+    enabled: true
+    max_workers: 25
+    strategy: threadpool  # threadpool, asyncio
+
+  # Connection pooling (TCP)
+  connection_pool:
+    enabled: false
+    size: 5
+    ttl_seconds: 60
+
+# Security settings
+security:
+  # Encryption preferences
+  encryption:
+    default_type: 1     # AES-128-CTR
+    allow_unencrypted: false
+
+  # Key derivation for AES-256 (Type 4)
+  type4_derivation: sha256  # sha256 or key_token
