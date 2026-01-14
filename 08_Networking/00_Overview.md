@@ -2,18 +2,22 @@
 
 ## Transport Protocols
 
-RAIDA supports two transport protocols:
+RAIDA supports two transport protocols on a single port:
 
-| Protocol | Port | Use Case |
-|----------|------|----------|
-| UDP | 18000-18024 | Default, fast, small packets |
-| TCP | 19000-19024 | Large payloads, reliability needed |
+| Protocol | Use Case |
+|----------|----------|
+| UDP | Default, fast, small packets (< 1400 bytes) |
+| TCP | Large payloads, reliability needed |
 
 ## Port Assignment
 
-Each RAIDA server has dedicated ports:
-- UDP: `18000 + raida_id` (e.g., RAIDA 0 = port 18000)
-- TCP: `19000 + raida_id` (e.g., RAIDA 0 = port 19000)
+Each RAIDA server listens on a single port that handles both UDP and TCP:
+- Port: `50000 + raida_id`
+- Example: RAIDA 0 = port 50000, RAIDA 24 = port 50024
+
+**Note:** These port assignments come from Guardian servers and can change dynamically.
+Clients should obtain current endpoints via the Guardian consensus system rather than
+hardcoding ports. See `05_Name_Resolution.md` for details.
 
 ## Transport Selection Decision Tree
 
@@ -47,4 +51,5 @@ Is payload > 1400 bytes?
 - `02_TCP_Transport.md` - TCP-specific details
 - `03_Parallel_Requests.md` - Sending to all 25 RAIDA
 - `04_Timeout_Strategy.md` - Timeout calculation
-- `05_Error_Handling.md` - Network error recovery
+- `05_Name_Resolution.md` - Guardian system and endpoint discovery
+- `06_Error_Handling.md` - Network error recovery

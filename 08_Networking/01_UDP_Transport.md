@@ -9,10 +9,15 @@ UDP is the preferred transport for RAIDA commands due to:
 
 ## Port Calculation
 
+Each RAIDA server listens on a single port for both UDP and TCP:
+
 ```python
-def get_udp_port(raida_id: int) -> int:
-    return 18000 + raida_id
+def get_raida_port(raida_id: int) -> int:
+    return 50000 + raida_id
 ```
+
+**Note:** Port assignments are provided by Guardian servers and may change.
+See `05_Name_Resolution.md` for obtaining current endpoints.
 
 ## Maximum Packet Size
 
@@ -56,7 +61,7 @@ def send_udp_request(
     packet: bytes,
     timeout_ms: int = 3000
 ) -> bytes:
-    port = 18000 + raida_id
+    port = 50000 + raida_id
     sock = create_udp_socket(timeout_ms)
 
     try:
@@ -108,7 +113,7 @@ for raida in range(25):
 # CORRECT - Single socket, sequential
 sock = create_udp_socket()
 for raida in range(25):
-    sock.sendto(packet, (host, 18000 + raida))
+    sock.sendto(packet, (host, 50000 + raida))
     # ... collect responses
 sock.close()
 ```

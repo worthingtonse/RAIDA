@@ -9,10 +9,15 @@ TCP is used when:
 
 ## Port Calculation
 
+Each RAIDA server listens on a single port for both UDP and TCP:
+
 ```python
-def get_tcp_port(raida_id: int) -> int:
-    return 19000 + raida_id
+def get_raida_port(raida_id: int) -> int:
+    return 50000 + raida_id
 ```
+
+**Note:** Port assignments are provided by Guardian servers and may change.
+See `05_Name_Resolution.md` for obtaining current endpoints.
 
 ## Connection Pattern
 
@@ -40,7 +45,7 @@ def create_tcp_socket(
     raida_id: int,
     connect_timeout_ms: int = 5000
 ) -> socket.socket:
-    port = 19000 + raida_id
+    port = 50000 + raida_id
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(connect_timeout_ms / 1000.0)
     sock.connect((host, port))
