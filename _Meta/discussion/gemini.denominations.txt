@@ -1,0 +1,80 @@
+This file proposes a complete rewrite of the denomination documentation to make it clear, unambiguous, and easily parsable for both AI and human developers.
+
+## 1. Analysis of Current Documentation Issues
+
+The existing `00_Overview.md` is highly confusing for several reasons:
+- **Opaque Encoding:** It does not explain that the "Decimal Code" is a base-10 exponent or that the "Hex Code" is the signed 8-bit (int8_t) representation of that exponent. This is the single biggest source of confusion.
+- **Missing Names:** Fractional denominations lack clear, consistent names.
+- **Inconsistent Formatting:** The `Displayed as` column uses inconsistent and non-standard formatting for decimal values.
+- **Lack of Context:** It fails to define the base currency or provide a clear formula for calculating a coin's value from its denomination ID.
+
+## 2. Proposed New Documentation Structure
+
+I recommend replacing the current content with the following structure, which explains the system from first principles.
+
+---
+*(Start of proposed `00_Overview.md` content)*
+
+# CloudCoin Denominations
+
+All CloudCoins exist in fixed amounts, called denominations, similar to physical coins and banknotes. Each denomination is identified by a unique **Denomination ID**.
+
+The system is based on powers of 10, making it metric and easy to scale. The base unit of currency is the **CloudCoin (CC)**. The smallest possible unit, 0.00000001 CC, is called a **Fragment**.
+
+## Value Calculation Formula
+
+The value of any coin is determined by its Denomination ID using a simple formula. The Denomination ID is a **signed 8-bit integer** (from -128 to 127) that serves as an exponent for base 10.
+
+**`Value in CloudCoins = 10 ^ (Denomination ID)`**
+
+### Examples:
+- A coin with Denomination ID `6` has a value of `10^6 = 1,000,000` CloudCoins.
+- A coin with Denomination ID `0` has a value of `10^0 = 1` CloudCoin.
+- A coin with Denomination ID `-2` has a value of `10^-2 = 0.01` CloudCoins.
+
+When sent over the network, the signed `int8_t` Denomination ID is transmitted as a single byte (`uint8_t`). For negative IDs, this corresponds to their two's complement hexadecimal representation.
+
+## Master Denomination Table
+
+This table provides the complete list of all currency-based denominations.
+
+| Proposed Name | Value (in CloudCoins) | Denomination ID (`int8_t`) | Hex Representation (`uint8_t`) | Calculation |
+| :--- | :--- | :---: | :---: | :--- |
+| 1 Million CC | 1,000,000 | 6 | `0x06` | `10^6` |
+| 100 Thousand CC| 100,000 | 5 | `0x05` | `10^5` |
+| 10 Thousand CC | 10,000 | 4 | `0x04` | `10^4` |
+| 1 Thousand CC | 1,000 | 3 | `0x03` | `10^3` |
+| 100-CloudCoin | 100 | 2 | `0x02` | `10^2` |
+| 10-CloudCoin | 10 | 1 | `0x01` | `10^1` |
+| 1-CloudCoin | 1 | 0 | `0x00` | `10^0` |
+| Tenth-Coin | 0.1 | -1 | `0xFF` | `10^-1` |
+| Centi-Coin | 0.01 | -2 | `0xFE` | `10^-2` |
+| Milli-Coin | 0.001 | -3 | `0xFD` | `10^-3` |
+| 10k-Fragment | 0.0001 | -4 | `0xFC` | `10^-4` |
+| 100k-Fragment | 0.00001 | -5 | `0xFB` | `10^-5` |
+| Mega-Fragment | 0.000001 | -6 | `0xFA` | `10^-6` |
+| Giga-Fragment | 0.0000001 | -7 | `0xF9` | `10^-7` |
+| Fragment | 0.00000001| -8 | `0xF8` | `10^-8` |
+
+*(Note: The names for fractional coins like "Tenth-Coin", "Centi-Coin", and "Milli-Coin" are proposed for clarity. The "Fragment" is established as the smallest base unit.)*
+
+## Making Change
+
+The metric nature of the denominations simplifies making change. A coin of a certain denomination can be "broken" into ten coins of the next lowest denomination.
+
+**Example:**
+- One **100-CloudCoin** (ID `2`) can be exchanged for:
+- Ten **10-CloudCoins** (ID `1`).
+
+This allows for transactions of any value to be completed by combining coins of different denominations, just like with physical cash. The total value of a wallet is the sum of the values of all coins it contains.
+
+---
+*(End of proposed content)*
+
+## 3. Summary of Key Improvements
+
+- **Clarity of Encoding:** The document now leads with the `Value = 10^ID` formula and explicitly defines the ID as a signed 8-bit integer.
+- **Comprehensive Table:** The new table is the single source of truth, clearly linking the name, value, signed ID, and its hex representation. This is ideal for an AI to parse and learn.
+- **Consistent Naming:** Proposes a clear and consistent (though flexible) naming convention for all denominations, including the fractional ones, and establishes "Fragment" as the smallest unit.
+- **Context and Examples:** The document now explains *why* the system exists (like cash) and provides a practical example of making change.
+- **Standardized Formatting:** All values are presented in a standard, easy-to-read decimal format.

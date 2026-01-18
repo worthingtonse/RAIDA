@@ -1,0 +1,475 @@
+=============================================================================
+RAIDA HEADER DOCUMENTATION ANALYSIS - ENCRYPTION TYPES
+=============================================================================
+
+SUMMARY OF FINDINGS
+-------------------
+The current documentation in 01_Header_32_Byte.md shows bytes 16-31 as identical
+for all encryption types (0, 1, 2, 3). However, the server code reveals that:
+
+1. Bytes 16-31 ARE DIFFERENT for each encryption type
+2. Types 4, 5, and 7 use a 48-BYTE header (not 32 bytes)
+3. Challenge/CRC IS required for Type 0 (unencrypted)
+4. Body structure differs significantly between legacy and modern types
+
+=============================================================================
+DOCUMENTATION CHANGES REQUIRED
+=============================================================================
+
+CHANGE 1: Separate documentation for each encryption type header format
+--------------------------------------------------------------------------
+The current 01_Header_32_Byte.md should be split into multiple files:
+- 01_Header_Type_0_Unencrypted.md
+- 02_Header_Type_1_AES_128.md
+- 03_Header_Type_2_Locker.md
+- 04_Header_Type_4_AES_256_Single.md
+- 05_Header_Type_5_AES_256_Dual.md
+- 06_Header_Type_7_Inter_RAIDA.md
+
+CHANGE 2: Update 00_Overview.md to show correct header sizes
+--------------------------------------------------------------------------
+Current (INCORRECT):
+| Encryption Type | Header Size |
+| 0, 1, 2, 3      | 32 bytes    |
+
+Should be:
+| Encryption Type | Header Size | Name                    |
+|-----------------|-------------|-------------------------|
+| 0               | 32 bytes    | Unencrypted             |
+| 1               | 32 bytes    | AES-128 (single coin)   |
+| 2               | 32 bytes    | AES-128 (locker)        |
+| 4               | 48 bytes    | AES-256 (single coin)   |
+| 5               | 48 bytes    | AES-256 (dual coin)     |
+| 7               | 48 bytes    | AES-256 (inter-RAIDA)   |
+
+(Note: Type 3 appears to be deprecated/unused in server code)
+
+=============================================================================
+DETAILED HEADER STRUCTURES BY ENCRYPTION TYPE
+=============================================================================
+
+TYPE 0 - UNENCRYPTED (32 bytes)
+-------------------------------
+```
+Offset: 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+        VR SP RI SH CG CM ID ID BF AP AP CP TR AI PI PC
+        EN -- -- -- -- -- BL BL -- -- -- -- -- -- EC EC
+        ^  ^              ^  ^                    ^  ^
+        |  |              |  |                    Echo bytes
+        |  |              Body length
+        |  Reserved (not used for Type 0)
+        Encryption type = 0
+```
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 16     | 1    | EN    | Encryption Type = 0x00 |
+| 17-21  | 5    | --    | Reserved (ignored, no key needed) |
+| 22-23  | 2    | BL    | Body Length (big-endian) |
+| 24-29  | 6    | --    | Reserved (nonce internally set to zeros) |
+| 30-31  | 2    | EC    | Echo bytes |
+
+BODY FORMAT for Type 0:
+- First 16 bytes: Challenge (12 random + 4 CRC32)
+- Remaining: Command payload
+- Last 2 bytes: Terminator 0x3E3E
+
+CRITICAL: Challenge/CRC IS REQUIRED for Type 0!
+
+Server code (protocol.c:708-726):
+```c
+if (ci->encryption_type == ENCRYPTION_TYPE_NONE)
+{
+    // Type 0: Unencrypted. The challenge is a direct copy.
+    if (ci->body_size < 18)
+        return ERROR_INVALID_PACKET_LENGTH;
+
+    memcpy(ci->challenge_hash, ci->body, 16);  // Direct copy for unencrypted
+
+    uint32_t crc = crc32b(ci->body, 12);
+    // Server validates CRC bytes 12-15 match computed CRC
+}
+```
+
+TYPE 1 - AES-128 SINGLE COIN (32 bytes)
+---------------------------------------
+```
+Offset: 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+        VR SP RI SH CG CM ID ID BF AP AP CP TR AI PI PC
+        EN DN SN SN SN SN BL BL NO NO NO NO NO NO EC EC
+        ^  ^  ^           ^  ^  ^                 ^  ^
+        |  |  |           |  |  8-byte nonce      Echo bytes
+        |  |  |           Body length
+        |  |  Key serial number (4 bytes, big-endian)
+        |  Key denomination (int8)
+        Encryption type = 1
+```
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 16     | 1    | EN    | Encryption Type = 0x01 |
+| 17     | 1    | DN    | Key coin denomination |
+| 18-21  | 4    | SN    | Key coin serial number (big-endian) |
+| 22-23  | 2    | BL    | Body Length (big-endian) |
+| 24-31  | 8    | NO    | 8-byte nonce (remaining 8 bytes are zeros internally) |
+| 30-31  | 2    | EC    | Echo bytes (NOTE: overlaps with nonce bytes 6-7!) |
+
+BODY FORMAT for Type 1:
+- First 16 bytes: Challenge (encrypted)
+- Remaining: Command payload (encrypted, excludes terminator)
+- Last 2 bytes: Terminator 0x3E3E (NOT encrypted)
+
+Server extracts nonce (protocol.c:600):
+```c
+memset(ci->nonce, 0, 16);
+memcpy(ci->nonce, &buf[24], 8);  // Only 8 bytes used
+```
+
+TYPE 2 - AES-128 LOCKER (32 bytes)
+----------------------------------
+Same structure as Type 1, but the coin is looked up in the locker index
+instead of the regular page store.
+
+TYPE 4 - AES-256 SINGLE KEY (48 bytes)
+--------------------------------------
+```
+Offset: 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+        VR SP RI SH CG CM ID ID BF AP AP CP TR AI PI PC
+        EN BL BL DN SN SN SN SN NO NO NO NO NO NO NO NO
+        NO NO NO NO NO NO NO NO NO NO NO NO NO NO NO NO
+        ^  ^     ^  ^           ^
+        |  |     |  |           24-byte nonce (bytes 24-47)
+        |  |     |  Key serial number (4 bytes)
+        |  |     Key denomination
+        |  Body length (bytes 17-18, different position!)
+        Encryption type = 4
+```
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 16     | 1    | EN    | Encryption Type = 0x04 |
+| 17-18  | 2    | BL    | Body Length (big-endian) |
+| 19     | 1    | DN    | Key coin denomination |
+| 20-23  | 4    | SN    | Key coin serial number |
+| 24-47  | 24   | NO    | 24-byte nonce |
+
+NO ECHO BYTES for Type 4!
+
+KEY DERIVATION: Single 16-byte AN is hashed (SHA-256) to produce 32-byte key.
+
+BODY FORMAT for Type 4:
+- Command payload (encrypted)
+- 32-byte HMAC (after ciphertext, before terminator)
+- Last 2 bytes: Terminator 0x3E3E
+
+NO CHALLENGE/CRC for Type 4! Uses HMAC authentication instead.
+
+TYPE 5 - AES-256 DUAL KEY (48 bytes)
+------------------------------------
+```
+Offset: 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+        VR SP RI SH CG CM ID ID BF AP AP CP TR AI PI PC
+        EN BL BL D1 S1 S1 S1 S1 D2 S2 S2 S2 S2 NO NO NO
+        NO NO NO NO NO NO NO NO NO NO NO NO NO NO NO NO
+        ^  ^     ^  ^           ^  ^           ^
+        |  |     |  |           |  |           Remaining nonce bytes
+        |  |     |  |           |  Second coin SN (bytes 25-28)
+        |  |     |  |           Second coin denomination
+        |  |     |  First coin SN
+        |  |     First coin denomination
+        |  Body length
+        Encryption type = 5
+```
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 16     | 1    | EN    | Encryption Type = 0x05 |
+| 17-18  | 2    | BL    | Body Length (big-endian) |
+| 19     | 1    | D1    | First coin denomination |
+| 20-23  | 4    | S1    | First coin serial number |
+| 24     | 1    | D2    | Second coin denomination |
+| 25-28  | 4    | S2    | Second coin serial number |
+| 24-47  | 24   | NO    | 24-byte nonce (DUAL-PURPOSE: includes coin 2 info!) |
+
+CRITICAL: Bytes 24-28 serve DUAL PURPOSE as both:
+- Second coin identification
+- Part of the 24-byte nonce
+
+KEY DERIVATION: Both 16-byte ANs are concatenated (32 bytes) then hashed
+(SHA-256) to produce 32-byte key.
+
+BODY FORMAT for Type 5: Same as Type 4 (HMAC, no challenge).
+
+TYPE 7 - INTER-RAIDA (48 bytes)
+-------------------------------
+```
+Offset: 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+        VR SP RI SH CG CM ID ID BF AP AP CP TR AI PI PC
+        EN RF KS KS KS KS BL BL NO NO NO NO NO NO NO NO
+        NO NO NO NO NO NO NO NO NO NO NO NO NO NO NO NO
+        ^  ^  ^           ^  ^  ^
+        |  |  |           |  |  24-byte nonce
+        |  |  |           Body length
+        |  |  Key selector (4-byte random)
+        |  Sender RAIDA ID
+        Encryption type = 7
+```
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 16     | 1    | EN    | Encryption Type = 0x07 |
+| 17     | 1    | RF    | Sender's RAIDA ID (0-24) |
+| 18-21  | 4    | KS    | Key selector (random) |
+| 22-23  | 2    | BL    | Body Length (big-endian) |
+| 24-47  | 24   | NO    | 24-byte nonce |
+
+KEY DERIVATION: Uses pre-shared key from key manager.
+
+BODY FORMAT for Type 7:
+- Command payload directly (NO challenge!)
+- Last 2 bytes: Terminator 0x3E3E
+
+NO CHALLENGE for Type 7 - this is server-to-server communication.
+
+=============================================================================
+PYTHON EXAMPLES NEEDED
+=============================================================================
+
+The documentation should include separate Python construction examples for
+each encryption type. Here are the key differences:
+
+TYPE 0 - Unencrypted Request Construction:
+------------------------------------------
+```python
+def build_type0_request(raida_id, command_group, command_code,
+                        body_length, echo):
+    header = bytearray(32)
+
+    # Routing (0-7)
+    header[0] = 0x01              # Version
+    header[1] = 0x00              # Split ID
+    header[2] = raida_id
+    header[3] = 0x00              # Shard ID
+    header[4] = command_group
+    header[5] = command_code
+    header[6:8] = (1).to_bytes(2, 'big')  # Coin ID
+
+    # Presentation (8-15)
+    header[8] = 0x01              # Bitfield
+    header[9:16] = b'\x00' * 7
+
+    # Encryption section (16-23) - Type 0 specific
+    header[16] = 0x00             # Encryption type 0
+    header[17:22] = b'\x00' * 5   # Reserved (no key needed)
+    header[22:24] = body_length.to_bytes(2, 'big')
+
+    # Nonce section (24-31) - Type 0 specific
+    header[24:30] = b'\x00' * 6   # Reserved
+    header[30:32] = echo[:2]      # Echo bytes
+
+    return bytes(header)
+
+def build_type0_body(command_payload):
+    # CRITICAL: Type 0 REQUIRES challenge even though unencrypted!
+    challenge = generate_challenge()  # 12 random + 4 CRC
+    body = challenge + command_payload + b'\x3e\x3e'
+    return body
+```
+
+TYPE 1 - AES-128 Single Key Request Construction:
+-------------------------------------------------
+```python
+def build_type1_request(raida_id, command_group, command_code,
+                        key_denomination, key_serial, body_length,
+                        nonce_8bytes, echo):
+    header = bytearray(32)
+
+    # Routing (0-7) - same as Type 0
+    header[0] = 0x01
+    header[1] = 0x00
+    header[2] = raida_id
+    header[3] = 0x00
+    header[4] = command_group
+    header[5] = command_code
+    header[6:8] = (1).to_bytes(2, 'big')
+
+    # Presentation (8-15) - same as Type 0
+    header[8] = 0x01
+    header[9:16] = b'\x00' * 7
+
+    # Encryption section (16-23) - Type 1 specific
+    header[16] = 0x01                    # Encryption type 1
+    header[17] = key_denomination        # int8
+    header[18:22] = key_serial.to_bytes(4, 'big')
+    header[22:24] = body_length.to_bytes(2, 'big')
+
+    # Nonce section (24-31) - Type 1 specific
+    header[24:30] = nonce_8bytes[:6]     # First 6 bytes of nonce
+    header[30:32] = echo[:2]             # Echo bytes (overlaps nonce!)
+
+    # NOTE: Internally server uses 16-byte nonce with bytes 0-7 from header,
+    # bytes 8-15 as zeros
+
+    return bytes(header)
+
+def build_type1_body(command_payload, key_an_16bytes, nonce_16bytes):
+    # Generate challenge
+    challenge = generate_challenge()
+
+    # Combine challenge + payload
+    plaintext = challenge + command_payload
+
+    # Encrypt with AES-CTR (terminator NOT encrypted)
+    ciphertext = aes_ctr_encrypt(plaintext, key_an_16bytes, nonce_16bytes)
+
+    # Add unencrypted terminator
+    body = ciphertext + b'\x3e\x3e'
+    return body
+```
+
+TYPE 4 - AES-256 Single Key Request Construction:
+-------------------------------------------------
+```python
+def build_type4_request(raida_id, command_group, command_code,
+                        key_denomination, key_serial, body_length,
+                        nonce_24bytes):
+    header = bytearray(48)  # 48 bytes, not 32!
+
+    # Routing (0-7)
+    header[0] = 0x01
+    header[1] = 0x00
+    header[2] = raida_id
+    header[3] = 0x00
+    header[4] = command_group
+    header[5] = command_code
+    header[6:8] = (1).to_bytes(2, 'big')
+
+    # Presentation (8-15)
+    header[8] = 0x01
+    header[9:16] = b'\x00' * 7
+
+    # Encryption section (16-23) - Type 4 specific
+    header[16] = 0x04                    # Encryption type 4
+    header[17:19] = body_length.to_bytes(2, 'big')  # Body length MOVED!
+    header[19] = key_denomination
+    header[20:24] = key_serial.to_bytes(4, 'big')
+
+    # Nonce section (24-47) - 24 bytes
+    header[24:48] = nonce_24bytes
+
+    # NO ECHO BYTES for Type 4
+
+    return bytes(header)
+
+def build_type4_body(command_payload, key_an_16bytes, nonce_24bytes):
+    # NO CHALLENGE for Type 4!
+
+    # Derive 256-bit key from 128-bit AN via SHA-256
+    key_256bit = hashlib.sha256(key_an_16bytes).digest()
+
+    # Encrypt payload (NO challenge prefix)
+    ciphertext = aes256_ctr_encrypt(command_payload, key_256bit, nonce_24bytes)
+
+    # Compute HMAC over ciphertext
+    hmac_value = compute_hmac_sha256(ciphertext, key_256bit)
+
+    # Body = ciphertext + 32-byte HMAC + terminator
+    body = ciphertext + hmac_value + b'\x3e\x3e'
+    return body
+```
+
+TYPE 5 - AES-256 Dual Key Request Construction:
+-----------------------------------------------
+```python
+def build_type5_request(raida_id, command_group, command_code,
+                        key1_denomination, key1_serial,
+                        key2_denomination, key2_serial,
+                        body_length, nonce_remaining_19bytes):
+    header = bytearray(48)
+
+    # Routing (0-7)
+    header[0:8] = ...  # Same as Type 4
+
+    # Presentation (8-15)
+    header[8:16] = ...  # Same as Type 4
+
+    # Encryption section (16-23) - Type 5 specific
+    header[16] = 0x05                    # Encryption type 5
+    header[17:19] = body_length.to_bytes(2, 'big')
+    header[19] = key1_denomination       # First coin
+    header[20:24] = key1_serial.to_bytes(4, 'big')
+
+    # Nonce section (24-47) - DUAL PURPOSE
+    header[24] = key2_denomination       # Second coin (also part of nonce!)
+    header[25:29] = key2_serial.to_bytes(4, 'big')  # Also part of nonce!
+    header[29:48] = nonce_remaining_19bytes  # Remaining nonce bytes
+
+    return bytes(header)
+
+def build_type5_body(command_payload, key1_an, key2_an, nonce_24bytes):
+    # Concatenate both ANs and hash to get 256-bit key
+    combined = key1_an + key2_an  # 32 bytes
+    key_256bit = hashlib.sha256(combined).digest()
+
+    # Rest is same as Type 4
+    ciphertext = aes256_ctr_encrypt(command_payload, key_256bit, nonce_24bytes)
+    hmac_value = compute_hmac_sha256(ciphertext, key_256bit)
+    body = ciphertext + hmac_value + b'\x3e\x3e'
+    return body
+```
+
+=============================================================================
+CHALLENGE/CRC REQUIREMENTS BY TYPE
+=============================================================================
+
+| Type | Challenge Required | CRC Required | HMAC Required | Payload Offset |
+|------|-------------------|--------------|---------------|----------------|
+| 0    | YES (16 bytes)    | YES          | NO            | +16 bytes      |
+| 1    | YES (16 bytes)    | YES          | NO            | +16 bytes      |
+| 2    | YES (16 bytes)    | YES          | NO            | +16 bytes      |
+| 4    | NO                | NO           | YES (32 bytes)| +0 bytes       |
+| 5    | NO                | NO           | YES (32 bytes)| +0 bytes       |
+| 7    | NO                | NO           | NO            | +0 bytes       |
+
+Server code for payload offset (protocol.c:1025-1034):
+```c
+unsigned char *get_body_payload(conn_info_t *ci)
+{
+    if (ci->encryption_type == ENCRYPTION_TYPE_NONE ||
+        ci->encryption_type == ENCRYPTION_TYPE_AES ||
+        ci->encryption_type == ENCRYPTION_TYPE_LOCKER)
+    {
+        return ci->body + 16;  // Skip 16-byte challenge
+    }
+    return ci->body;  // No challenge for modern types (4, 5, 7)
+}
+```
+
+NOTE: There is a feedback file (claude_opus_communication-feedback.txt) suggesting
+types 4 and 5 DO include challenge and this function should be fixed to skip 16
+bytes for types 4 and 5 as well, only skipping for type 7. However, the current
+server code shows types 4, 5, 7 all returning ci->body without skip. The
+documentation should match the actual server implementation.
+
+=============================================================================
+RECOMMENDED DOCUMENTATION STRUCTURE
+=============================================================================
+
+02_Request_Headers/
+  00_Overview.md          - Update with correct header sizes per type
+  01_Header_Common.md     - Bytes 0-15 (routing + presentation, same for all)
+  02_Type_0_Header.md     - 32-byte header for unencrypted
+  03_Type_1_Header.md     - 32-byte header for AES-128 single
+  04_Type_2_Header.md     - 32-byte header for AES-128 locker
+  05_Type_4_Header.md     - 48-byte header for AES-256 single (NEW FILE)
+  06_Type_5_Header.md     - 48-byte header for AES-256 dual (NEW FILE)
+  07_Type_7_Header.md     - 48-byte header for inter-RAIDA (NEW FILE)
+
+05_Challenge_Response/
+  00_CRC32.md             - Unchanged
+  01_Challenge_Construction.md - Add note that ONLY types 0, 1, 2 use challenge
+  02_HMAC_Authentication.md    - NEW FILE for types 4, 5
+
+=============================================================================
+END OF ANALYSIS
+=============================================================================

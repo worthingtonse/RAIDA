@@ -1,0 +1,115 @@
+This file (v2) provides a comprehensive plan to reorganize the RAIDA documentation. The goal is to create a clean, logical structure that is easy for human developers to navigate and unambiguous for AI agents to parse.
+
+## 1. The Problem: A Disorganized Directory
+
+The current directory structure at `New_Docs/RAIDA/` has grown organically and contains numerous issues that create confusion:
+- **Duplicated Topics:** Multiple folders cover the same topic (e.g., `07_Algorithms` vs. `12_Algorithms`, and at least three separate `Cryptography`/`Security` folders).
+- **Empty/Legacy Folders:** Many numbered folders are empty, creating noise.
+- **No Clear Separation:** Documents that strictly define the protocol's wire format are mixed with tutorials, conceptual guides, project management files (RFP), and temporary work files.
+
+This disorganization makes it difficult for any user—human or AI—to distinguish the official protocol specification from supplementary background material.
+
+## 2. The Solution: A Specification-Centric Structure
+
+The most effective way to solve this is to create a clean separation of concerns at the top level. I propose restructuring the entire directory around three primary folders:
+
+1.  **`Specification`**: This folder will contain **only** the formal, normative documents that define the RAIDA protocol. This is the contract.
+2.  **`Reference`**: This folder will contain all supplementary, non-normative materials, such as tutorials, guides, diagrams, and conceptual overviews.
+3.  **`_Meta`**: This folder will house all temporary work files, AI collaboration notes, and other items not part of the final documentation set.
+
+### Why This Structure is Superior for AI
+
+The alternative approach is to create a `Supplementary` folder and move non-protocol documents into it, leaving the core documents at the top level. My proposed `Specification`-centric approach is better for one key reason: **it moves from a logic of exclusion to a logic of inclusion.**
+
+-   **Alternative (`Supplementary` folder):** The instruction to an AI is "Use everything at the top level, *except* for the `Supplementary` folder, and also ignore the empty folders and any other legacy files." This is complex and brittle.
+-   **Proposed (`Specification` folder):** The instruction is **"The complete and authoritative protocol definition is contained within the `/Specification` directory."** This is simple, robust, and unambiguous.
+
+## 3. Proposed New Directory Structure
+
+This "before and after" view illustrates the scale of the cleanup and the clarity of the proposed new structure.
+
+### Before (Current Messy Structure):
+```
+/RAIDA
+├── 00_Introduction/
+├── 01_Protocol_Fundamentals/
+├── 02_Cryptography_and_Security/  (Legacy/Empty)
+├── 02_Request_Headers/
+├── 03_Networking_and_Transport/ (Legacy/Empty)
+├── 03_Response_Headers/
+├── 04_Command_Reference/      (Legacy/Empty)
+├── 05_Challenge_Response/
+├── 06_Denominations/
+├── 06_Terminator/             (Duplicate Number)
+├── 07_Commands/
+├── 09_Client_Guide/
+├── 12_Algorithms/
+├── 15_RFP/
+├── 90_Diagrams/
+├── discussion/
+└── claude-opus-4-5.body.txt   (and many other work files)
+```
+
+### After (Clean, Proposed Structure):
+```
+/RAIDA
+├── Specification/
+│   ├── 01_Fundamentals/
+│   ├── 02_Headers/
+│   ├── 03_Data_Formats/
+│   ├── 04_Commands/
+│   ├── 05_Algorithms/
+│   └── README.md
+│
+├── Reference/
+│   ├── 01_Introduction/
+│   ├── 02_Client_Guide/
+│   ├── 03_Server_Guide/
+│   ├── 04_Diagrams/
+│   └── 99_RFP/
+│
+├── _Meta/
+│   ├── discussion/
+│   └── ai_collaboration_files/
+│
+└── README.md (The main project README)
+```
+
+## 4. Detailed Reorganization Steps
+
+The following mapping details how to consolidate the old directories into the clean new structure.
+
+**Step 1: Create the new top-level folders: `Specification`, `Reference`, `_Meta`.**
+
+**Step 2: Populate the `Specification/` Folder**
+This folder defines the protocol contract.
+
+| New Location in `Specification/` | Old Folders to Consolidate/Move Here |
+|:---|:---|
+| `01_Fundamentals/` | `01_Protocol_Fundamentals/`, `06_Terminator/`, `08_Networking/` (for port info) |
+| `02_Headers/` | `02_Request_Headers/`, `03_Response_Headers/` |
+| `03_Data_Formats/` | `06_Denominations/`, `05_Challenge_Response/`, `11_File_Formats/` (if any define wire formats) |
+| `04_Commands/` | `07_Commands/` |
+| `05_Algorithms/`| `12_Algorithms/`, `02_Cryptography_and_Security/`, `04_Cryptography/`, `14_Security/` (consolidate all algorithm and security *specifications* here, such as AES-CTR and CRC32 spec) |
+
+**Step 3: Populate the `Reference/` Folder**
+This folder provides helpful but non-essential context.
+
+| New Location in `Reference/` | Old Folders to Consolidate/Move Here |
+|:---|:---|
+| `01_Introduction/` | `00_Introduction/`, `99_Appendices/` |
+| `02_Client_Guide/` | `09_Client_Guide/`, `05_Client_Implementation_Guide/` |
+| `03_Server_Guide/` | `10_Server_Guide/`, `06_Server_Implementation_Guide/` |
+| `04_Diagrams/` | `90_Diagrams/` |
+| `99_RFP/` | `15_RFP/` |
+
+**Step 4: Populate the `_Meta/` Folder**
+This folder isolates temporary and collaborative work files.
+
+| New Location in `_Meta/` | Old Items to Move Here |
+|:---|:---|
+| `ai_collaboration_files/` | All `*.txt` files generated by the AI models at the root. |
+| `discussion/`| The existing `discussion/` folder. |
+
+**Step 5: Delete All Old and Empty Folders**
+After all content has been moved to its new home, the old and now-empty directories at the root should be deleted to complete the cleanup.

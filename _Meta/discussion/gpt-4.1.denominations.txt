@@ -1,0 +1,22 @@
+Denomination doc issues & fixes to avoid AI confusion:
+
+1) Fractional names missing/ambiguous: Hex F9–FD are unnamed (“?”). Give consistent names and decimal meaning:  
+   - 0xF8 = -8 = 0.0000-0001 (suggest: “Satoshi”)  
+   - 0xF9 = -7 = 0.0000-001 (suggest: “Micro‑1”)  
+   - 0xFA = -6 = 0.0000-01 (suggest: “Micro‑10”)  
+   - 0xFB = -5 = 0.0000-1 (suggest: “Milli‑1”)  
+   - 0xFC = -4 = 0.0001 (suggest: “Milli‑10”)  
+   - 0xFD = -3 = 0.001 (suggest: “Milli‑100”)  
+   - 0xFE = -2 = 0.01 (already Cent)  
+   - 0xFF = -1 = 0.1 (already Dime)
+   Use short, unambiguous labels that show scale progression; include decimal and scientific notation (e.g., 1e-7).
+
+2) Clarify encoding: Denomination byte is signed range F8–FF for negatives, 00..06 for positives. Note that values are 10^exp where exp is the signed decimal code; exp = -8 means 10^-8, exp = 6 means 10^6.
+
+3) Explain break/join rules explicitly: Any 10 units of exp N combine to 1 unit of exp N+1; any 1 unit of exp N splits into 10 units of exp N-1. State smallest (F8) cannot split further; largest (0x06) cannot join further.
+
+4) Add a clean table with columns: Hex, Dec exp, Name, Value (decimal), Example display. Include grouping for fractional (<0) vs whole (>=0).
+
+5) Avoid inconsistent formatting: Remove stray “into into”, fix spacing, and standardize value format (e.g., 0.00000001 not “.0000-0001”).
+
+6) Add AI guidance: Treat denomination as power-of-ten exponent; do not reinterpret negative codes as “subtract” or sign-ext issues; always parse as unsigned byte then map to signed exponent.

@@ -1,0 +1,15 @@
+Opus plan review (scope: only types 0,1,2; 32-byte headers; no 3/4/5/7):
+
+Positives:
+- v2 correctly drops 4/5/7 and focuses on 0/1/2.
+- Clear per-type tables, body rules, and Python examples; good call-out of nonce/echo dual use and 8-byte nonce.
+
+Critical corrections:
+- Type 3: per latest direction, keep it noted as reserved/invalid, but don’t say “removed” everywhere; state “reserved/unsupported; server returns ERROR_INVALID_ENCRYPTION.” Avoid implying it vanished from the numbering.
+- Echo wording: make explicit that bytes 30–31 are both echo and the last two bytes of the 8-byte nonce for types 1/2; for type 0 the nonce is ignored/zeroed but echo still read from 30–31.
+- Terminator: reiterate that 0x3E3E is not encrypted for types 1/2; ensure examples keep it plaintext.
+- Challenge construction: restate format as 12 random bytes + 4-byte big-endian CRC32 of those 12 bytes; for type 0 it’s plaintext, for 1/2 it’s encrypted then CRC-checked after decrypt.
+
+Suggestions:
+- Add a single “at a glance” header-bytes table for 16–31 across types 0/1/2 to show the differences side-by-side (helps avoid confusion about nonce/echo).
+- Note client guidance: for types 1/2 you can use any 8 bytes; if you want deterministic echo, set bytes 30–31 to your tracking value and choose bytes 24–29 freely.

@@ -1,0 +1,7 @@
+CRC documentation cleanup (single source of truth):
+
+1) Centralize: Keep the authoritative CRC description only in the CRC folder (e.g., New_Docs/RAIDA/12_Algorithms/CRC/*.md). In 12_Algorithms/00_Overview.md (and elsewhere), replace the CRC section with a one-line pointer to that canonical page.
+2) Specify exact algorithm once: CRC32B (poly 0xEDB88320 / reflected 0x04C11DB7, init 0xFFFFFFFF, reflect in/out, xorout 0xFFFFFFFF, byte order LSB-first). Include a minimal code snippet and a test vector in the canonical file.
+3) Usage references: In request/response/challenge docs, say “Challenge CRC uses the standard CRC32B defined in the CRC page” rather than repeating parameters.
+4) Cross-link: Add links from headers/body/challenge docs to the canonical CRC page to prevent divergence.
+5) Consistency check: Remove or correct any conflicting CRC wording (polynomial, init, reflection, xorout, endian) in other files to match the canonical spec.

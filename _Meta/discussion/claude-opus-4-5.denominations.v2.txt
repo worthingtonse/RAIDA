@@ -1,0 +1,275 @@
+=============================================================================
+DENOMINATION DOCUMENTATION ANALYSIS v2 - Claude Opus 4.5
+=============================================================================
+
+Incorporating feedback from GPT-4.1 and Gemini models.
+
+=============================================================================
+RECOMMENDED COMPLETE REWRITE OF 00_Overview.md
+=============================================================================
+
+# Denominations
+
+## Core Formula
+
+The denomination system uses powers of 10. Each denomination code is an
+exponent:
+
+```
+Token Value = 10 ^ denomination_code
+```
+
+| Code | Calculation | Value |
+|------|-------------|-------|
+| -8   | 10^-8       | 0.00000001 |
+| -2   | 10^-2       | 0.01 |
+| 0    | 10^0        | 1 |
+| 3    | 10^3        | 1,000 |
+| 6    | 10^6        | 1,000,000 |
+
+## Byte Encoding
+
+The denomination is stored as a **signed 8-bit integer (int8_t)** and
+transmitted as a single byte. Negative values use two's complement:
+
+| Signed Value | Byte (Hex) | Byte (Decimal) |
+|--------------|------------|----------------|
+| -8           | 0xF8       | 248            |
+| -1           | 0xFF       | 255            |
+| 0            | 0x00       | 0              |
+| 6            | 0x06       | 6              |
+
+**AI Note:** When parsing, read the byte as uint8_t, then cast to int8_t
+to get the signed exponent. Do NOT treat 0xF8 as 248; it means -8.
+
+## Complete Denomination Table
+
+### Fractional Denominations (Codes -8 to -1)
+
+| Code | Hex  | Name       | Value        | Scientific | Display    |
+|------|------|------------|--------------|------------|------------|
+| -8   | 0xF8 | Nano       | 0.00000001   | 1e-8       | .00000001  |
+| -7   | 0xF9 | Deca-Nano  | 0.0000001    | 1e-7       | .0000001   |
+| -6   | 0xFA | Micro      | 0.000001     | 1e-6       | .000001    |
+| -5   | 0xFB | Deca-Micro | 0.00001      | 1e-5       | .00001     |
+| -4   | 0xFC | Tick       | 0.0001       | 1e-4       | .0001      |
+| -3   | 0xFD | Mil        | 0.001        | 1e-3       | .001       |
+| -2   | 0xFE | Cent       | 0.01         | 1e-2       | .01        |
+| -1   | 0xFF | Dime       | 0.1          | 1e-1       | .1         |
+
+**Nano** is the smallest possible unit. Also known as "Satoshi" (named after
+the concept of an indivisible smallest unit, not related to Bitcoin).
+
+### Whole Denominations (Codes 0 to 6)
+
+| Code | Hex  | Name      | Value      | Scientific | Display     |
+|------|------|-----------|------------|------------|-------------|
+| 0    | 0x00 | One       | 1          | 1e0        | 1           |
+| 1    | 0x01 | Ten       | 10         | 1e1        | 10          |
+| 2    | 0x02 | Hundred   | 100        | 1e2        | 100         |
+| 3    | 0x03 | Thousand  | 1,000      | 1e3        | 1,000       |
+| 4    | 0x04 | Ten-K     | 10,000     | 1e4        | 10,000      |
+| 5    | 0x05 | Hundred-K | 100,000    | 1e5        | 100,000     |
+| 6    | 0x06 | Million   | 1,000,000  | 1e6        | 1,000,000   |
+
+**Million** is the largest denomination. Cannot be joined into anything larger.
+
+## Name Reference
+
+For AI parsing, here are all names with aliases:
+
+| Code | Primary Name | Aliases              |
+|------|--------------|----------------------|
+| -8   | Nano         | Satoshi, Fragment    |
+| -7   | Deca-Nano    | Ten-Nano             |
+| -6   | Micro        | Millionth            |
+| -5   | Deca-Micro   | Ten-Micro            |
+| -4   | Tick         | Basis-Point, BP      |
+| -3   | Mil          | Milli, Thousandth    |
+| -2   | Cent         | Centi, Hundredth     |
+| -1   | Dime         | Deci, Tenth          |
+| 0    | One          | Unit, Single         |
+| 1    | Ten          | Deca                 |
+| 2    | Hundred      | Hecto, C-Note        |
+| 3    | Thousand     | Kilo, Grand, K       |
+| 4    | Ten-K        | Ten-Thousand         |
+| 5    | Hundred-K    | Hundred-Thousand     |
+| 6    | Million      | Mega, M              |
+
+## Break and Join Rules
+
+Denominations can be exchanged at a 10:1 ratio:
+
+### BREAK (Split 1 large into 10 smaller)
+```
+1 token of code N  -->  10 tokens of code (N-1)
+```
+
+Examples:
+- 1 One (code 0) --> 10 Dimes (code -1)
+- 1 Thousand (code 3) --> 10 Hundreds (code 2)
+- 1 Micro (code -6) --> 10 Deca-Nanos (code -7)
+
+**Limit:** Cannot break below Nano (code -8)
+
+### JOIN (Combine 10 smaller into 1 larger)
+```
+10 tokens of code N  -->  1 token of code (N+1)
+```
+
+Examples:
+- 10 Cents (code -2) --> 1 Dime (code -1)
+- 10 Ones (code 0) --> 1 Ten (code 1)
+- 10 Hundred-Ks (code 5) --> 1 Million (code 6)
+
+**Limit:** Cannot join above Million (code 6)
+
+## Conversion Between Denominations
+
+To convert a quantity from one denomination to another:
+
+```
+new_quantity = old_quantity × 10^(old_code - new_code)
+```
+
+### Examples:
+
+**Convert 500 Cents to Ones:**
+- Cents = code -2, Ones = code 0
+- new_quantity = 500 × 10^(-2 - 0) = 500 × 10^-2 = 500 × 0.01 = 5 Ones
+
+**Convert 3 Thousands to Dimes:**
+- Thousands = code 3, Dimes = code -1
+- new_quantity = 3 × 10^(3 - (-1)) = 3 × 10^4 = 30,000 Dimes
+
+**Convert 1 Million to Nanos:**
+- Million = code 6, Nano = code -8
+- new_quantity = 1 × 10^(6 - (-8)) = 1 × 10^14 = 100,000,000,000,000 Nanos
+
+## Protocol Encoding
+
+In the RAIDA protocol, a coin is identified by 5 bytes:
+
+```
+[Denomination 1B][Serial Number 4B]
+     int8_t          uint32_t BE
+```
+
+### Encoding Examples:
+
+| Coin | Denomination | Serial | Bytes (Hex) |
+|------|--------------|--------|-------------|
+| Nano #1234 | -8 (0xF8) | 1234 | F8 00 00 04 D2 |
+| Cent #5000 | -2 (0xFE) | 5000 | FE 00 00 13 88 |
+| One #999 | 0 (0x00) | 999 | 00 00 00 03 E7 |
+| Million #1 | 6 (0x06) | 1 | 06 00 00 00 01 |
+
+## AI Implementation Guide
+
+### Parsing Denomination from Byte
+
+```python
+def parse_denomination(byte_value: int) -> int:
+    """
+    Convert unsigned byte to signed denomination code.
+
+    Args:
+        byte_value: 0-255 (uint8_t from protocol)
+
+    Returns:
+        Signed denomination code (-128 to 127)
+    """
+    if byte_value > 127:
+        return byte_value - 256  # Two's complement
+    return byte_value
+
+# Examples:
+parse_denomination(0xF8)  # Returns -8
+parse_denomination(0xFF)  # Returns -1
+parse_denomination(0x00)  # Returns 0
+parse_denomination(0x06)  # Returns 6
+```
+
+### Computing Token Value
+
+```python
+def get_token_value(denomination_code: int) -> float:
+    """
+    Get the value of a token from its denomination code.
+
+    Args:
+        denomination_code: Signed int (-8 to 6 for currency)
+
+    Returns:
+        Token value as decimal
+    """
+    return 10 ** denomination_code
+
+# Examples:
+get_token_value(-8)  # Returns 0.00000001 (Nano)
+get_token_value(-2)  # Returns 0.01 (Cent)
+get_token_value(0)   # Returns 1.0 (One)
+get_token_value(6)   # Returns 1000000.0 (Million)
+```
+
+### Computing Total Wallet Value
+
+```python
+def compute_wallet_value(coins: list) -> float:
+    """
+    Compute total value of coins in wallet.
+
+    Args:
+        coins: List of (denomination_code, count) tuples
+
+    Returns:
+        Total value in base units
+    """
+    total = 0.0
+    for denom_code, count in coins:
+        total += count * (10 ** denom_code)
+    return total
+
+# Example: 5 Ones + 3 Dimes + 50 Cents
+compute_wallet_value([(0, 5), (-1, 3), (-2, 50)])
+# = 5×1 + 3×0.1 + 50×0.01 = 5 + 0.3 + 0.5 = 5.8
+```
+
+## Common AI Mistakes to Avoid
+
+1. **DO NOT** treat 0xF8 as 248. It is -8 (signed).
+
+2. **DO NOT** confuse the code with the value:
+   - Code -2 does NOT mean "negative 2 coins"
+   - It means the value is 10^-2 = 0.01
+
+3. **DO NOT** assume linear relationship:
+   - Code 2 is NOT twice the value of Code 1
+   - Code 2 = 100, Code 1 = 10 (10× relationship, not 2×)
+
+4. **DO NOT** use string names for computation:
+   - Always use the numeric code for calculations
+   - Names are for human display only
+
+5. **DO NOT** forget the exponent is signed:
+   - Positive codes = whole numbers (≥1)
+   - Negative codes = fractions (<1)
+   - Zero code = exactly 1
+
+## Design Rationale
+
+**Why logarithmic encoding?**
+A single byte can represent values spanning 14 orders of magnitude
+(10^-8 to 10^6). Linear encoding would require many more bytes.
+
+**Why base 10?**
+Metric system compatibility. Conversion is trivial: just add/subtract codes.
+10 of denomination N equals 1 of denomination N+1.
+
+**Why signed?**
+Unifies fractional (negative exponents) and whole (positive exponents)
+values in one coherent system. Zero represents the base unit (1).
+
+=============================================================================
+END OF ANALYSIS v2
+=============================================================================

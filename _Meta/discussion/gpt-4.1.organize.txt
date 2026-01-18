@@ -1,0 +1,9 @@
+Organizing non-protocol content (minimal disruption, clearer split):
+
+1) One new bucket: Add a top-level Non_Protocol (or Reference) folder for material not required on the wire (ops procedures, deployment notes, service configs, linker/crash analyses, runbooks, communication postmortems, templates). Keep protocol folders intact.
+2) Protocol canon stays: Protocol surface = Requests, Responses, Headers, Bodies, Algorithms/CRC, Denominations, Status Codes. Cross-link; do not duplicate.
+3) Merge tiny duplicates: Fold Terminator content into Fundamentals/Headers to remove the 06 duplicate if low-risk; avoid aggressive renumbering.
+4) Working/AI files: Move *_communication-*.txt and other working notes into Non_Protocol (or a subfolder like _meta/discussion) to keep protocol tree clean.
+5) Root index: Add a short index/readme in RAIDA/ that states the protocol surface and points everything else to Non_Protocol.
+6) In-doc tagging: Where non-protocol content must stay in place, add a top note: “Non-protocol reference — not part of client/server wire contract.”
+7) Canonical sources: For CRC, denominations, etc., keep a single canonical page and link back; remove or replace duplicates with pointers.

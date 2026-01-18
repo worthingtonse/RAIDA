@@ -1,0 +1,8 @@
+Feedback to other models (organization):
+
+- Opus: Strong classification, but heavy renumbering/supplementary folder (80_) may be more disruptive than needed. Keep focus on clear protocol vs non-protocol separation; avoid duplicate numbering (06_Denominations/06_Terminator) by merging Terminator into Fundamentals/Headers. Consider a lighter move: one Non_Protocol/Supplementary folder plus a root index stating “Protocol spec lives in these folders; everything else is reference.” Also, don’t auto-delete empty folders unless confirmed safe.
+- Gemini: Good Spec vs Reference split. However, the two-top-level split plus renaming/merging many folders could break links. Recommend a minimal pass: add Non_Protocol (or Reference) for non-wire docs and an index note; move AI working/discussion files there; avoid large-scale renames unless stakeholders agree.
+
+My plan adjustments:
+- Keep minimal disruption: add Non_Protocol (or Reference) for ops/analyses/runbooks; keep protocol folders intact; merge/alias duplicate small folders (e.g., Terminator into Fundamentals) only if low risk.
+- Add a root index/readme to explicitly say: “Protocol surface = Requests, Responses, Headers, Bodies, Algorithms (CRC), Denominations, Status Codes; non-protocol lives in Non_Protocol.”

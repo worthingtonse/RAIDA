@@ -1,0 +1,61 @@
+This document clarifies the server-side implementation of the 32-byte request header based on analysis of the `RAIDAX-master` source code, primarily `protocol.c`. The existing documentation has been found to be ambiguous or incorrect in several key areas.
+
+## 1. Summary of Findings
+
+- The server's handling of header bytes 16-31 is highly dependent on the Encryption Type (byte 16).
+- The documentation incorrectly specifies the nonce size; the server uses 8 bytes, not 6.
+- The last two bytes of the 8-byte nonce (bytes 30-31) are also used as the Echo field, a detail missing from the documentation.
+- A "Challenge" and CRC are required in the *body* of the request for all 32-byte header encryption types, including unencrypted requests (Type 0).
+- `ENCRYPTION_TYPE_3` is mentioned in the documentation but is not implemented or handled in the server code for 32-byte headers.
+
+## 2. Header Field Breakdown by Encryption Type
+
+Bytes 0-15 are consistent across all types as described in the documentation. The behavior of bytes 16-31 is as follows:
+
+---
+
+### Encryption Type 0 (ENCRYPTION_TYPE_NONE)
+
+This type is for unencrypted communication. The server ignores most encryption-related fields.
+
+| Offset | Size | Field | Server-Side Handling | Recommendation |
+| :--- | :--- | :--- | :--- | :--- |
+| 16 | 1 | EN | **Required**. Must be `0x00`. | Set to `0x00`. |
+| 17 | 1 | DN | **Ignored**. | Send as `0x00`. |
+| 18-21 | 4 | SN | **Ignored**. | Send as `0x00000000`. |
+| 22-23 | 2 | BL | **Used**. Sets the body length. | Set to actual body length. |
+| 24-29 | 6 | Nonce | **Ignored**. | Send as zeros. |
+| 30-31 | 2 | Echo | **Used**. The server reads and echos these bytes in the response. | Set to a unique client tracking value. |
+
+---
+
+### Encryption Types 1 & 2 (ENCRYPTION_TYPE_AES, ENCRYPTION_TYPE_LOCKER)
+
+These types are for AES-128-CTR encrypted communication. The server uses the header to derive the encryption key and nonce.
+
+| Offset | Size | Field | Server-Side Handling | Recommendation |
+| :--- | :--- | :--- | :--- | :--- |
+| 16 | 1 | EN | **Required**. Must be `0x01` or `0x02`. | Set to `0x01` or `0x02`. |
+| 17 | 1 | DN | **Required**. Used with SN to look up the coin's 16-byte AN (the AES key). | Set to the key coin's denomination. |
+| 18-21 | 4 | SN | **Required**. Used with DN to look up the coin's 16-byte AN (the AES key). | Set to the key coin's serial number. |
+| 22-23 | 2 | BL | **Used**. Sets the encrypted body length. | Set to actual encrypted body length. |
+| 24-31 | 8 | Nonce | **Required**. An **8-byte** nonce is read from this block (`buf[24]` to `buf[31]`) and used for AES-CTR decryption. | Provide 8 random bytes. **Note:** This contradicts the documentation's 6-byte size. |
+| 30-31 | 2 | Echo | **Used**. The server reads these two bytes and echos them. **These bytes are simultaneously the last two bytes of the 8-byte nonce.** | Set to a unique client tracking value. Be aware of the overlap with the nonce. |
+
+
+## 3. Request Body "Challenge/CRC" Requirement
+
+For **all** 32-byte header types (0, 1, and 2), the server expects the request body to begin with a 16-byte challenge and a 4-byte CRC32 checksum.
+
+-   **Structure**: The first 16 bytes of the body are the "Challenge". Bytes 12, 13, 14, and 15 of the body must contain the CRC32 checksum of the first 12 bytes.
+-   **Type 0 (Unencrypted)**: The server reads the first 16 bytes of the plaintext body and validates the CRC.
+-   **Types 1 & 2 (Encrypted)**: This entire 16-byte structure is part of the **encrypted** payload. The server decrypts the body first, then validates the CRC on the resulting plaintext.
+
+## 4. Recommendations for Documentation and Code
+
+1.  **Update `01_Header_32_Byte.md`:** The "Byte Map" and "Field Reference" should be replaced with separate sections for each encryption type (0, 1, and 2) to clearly show which fields are used.
+2.  **Correct the Nonce Field:** The documentation must be updated to state that the nonce for Types 1 & 2 is **8 bytes** (offsets 24-31), not 6.
+3.  **Document Nonce/Echo Overlap:** The fact that the Echo bytes (30-31) are also the last two bytes of the nonce must be explicitly stated.
+4.  **Document Body Challenge/CRC:** The requirement for the 16-byte Challenge and 4-byte CRC at the start of the request body for all legacy types must be clearly documented. This is a critical and undocumented part of the protocol.
+5.  **Remove ENCRYPTION_TYPE_3:** The documentation should be corrected to show that only types 0, 1, and 2 are valid for the 32-byte header, as type 3 is not implemented.
+6.  **Update Python Example:** The `build_header_32` function should be modified or split into multiple examples to demonstrate the correct header construction for each encryption type, highlighting the differences in which fields are populated.

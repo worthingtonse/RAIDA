@@ -1,0 +1,307 @@
+=============================================================================
+RESPONSE HEADER AND BODY ANALYSIS - Claude Opus 4.5
+=============================================================================
+
+SCOPE: Encryption types 0, 1, 2 only (Type 3 reserved/unsupported)
+
+=============================================================================
+ISSUE 1: SIGNATURE CALCULATION IS WRONG FOR TYPE 0
+=============================================================================
+
+Current documentation (00_Overview.md) states:
+
+    Signature = Challenge XOR Encryption_AN
+
+This is INCORRECT for Type 0 (unencrypted).
+
+ACTUAL SERVER BEHAVIOR (from protocol.c):
+
+Type 0 (ENCRYPTION_TYPE_NONE):
+```c
+// Line 714: Direct copy for unencrypted
+memcpy(ci->challenge_hash, ci->body, 16);
+```
+
+Types 1 & 2 (ENCRYPTION_TYPE_AES, ENCRYPTION_TYPE_LOCKER):
+```c
+// Line 738-741: XOR with key after decryption
+for (int i = 0; i < 16; i++)
+{
+    ci->challenge_hash[i] = ci->body[i] ^ ci->encryption_an[i];
+}
+```
+
+CORRECT DOCUMENTATION:
+
+| Type | Signature Calculation |
+|------|----------------------|
+| 0    | challenge_hash = request_body[0:16] (direct copy) |
+| 1    | challenge_hash = decrypted_body[0:16] XOR encryption_an |
+| 2    | challenge_hash = decrypted_body[0:16] XOR encryption_an |
+
+For Type 0, there is NO XOR operation. The signature IS the challenge itself.
+
+=============================================================================
+ISSUE 2: RESPONSE BODY ENCRYPTION NOT DOCUMENTED
+=============================================================================
+
+The current documentation does not mention that the response body is encrypted
+for Types 1 and 2.
+
+ACTUAL SERVER BEHAVIOR (from protocol.c, prepare_response function):
+
+Type 0:
+```c
+// Lines 457-462: For type 0, payload copied as plaintext
+memcpy(body_start, ci->output, payload_size);
+```
+
+Types 1 & 2:
+```c
+// Lines 448-455: For encrypted types, encrypt the payload first
+if (ci->encryption_type == ENCRYPTION_TYPE_AES ||
+    ci->encryption_type == ENCRYPTION_TYPE_LOCKER)
+{
+    if (payload_size > 0)
+    {
+        crypt_ctr(ci->encryption_an, ci->output, payload_size, ci->nonce);
+    }
+}
+// Then copy the now-encrypted payload
+memcpy(body_start, ci->output, payload_size);
+```
+
+CORRECT DOCUMENTATION:
+
+| Type | Response Body |
+|------|--------------|
+| 0    | Plaintext: [payload][0x3E3E] |
+| 1    | Encrypted: [AES-CTR(payload)][0x3E3E] |
+| 2    | Encrypted: [AES-CTR(payload)][0x3E3E] |
+
+Note: The terminator (0x3E3E) is NEVER encrypted, same as request.
+
+=============================================================================
+ISSUE 3: RESPONSE USES SAME KEY AND NONCE AS REQUEST
+=============================================================================
+
+The documentation should clarify that for Types 1 and 2:
+- The same encryption key (token AN) is used for response
+- The same nonce (from request header bytes 24-31) is used for response
+
+Server code (prepare_response):
+```c
+crypt_ctr(ci->encryption_an, ci->output, payload_size, ci->nonce);
+```
+
+This means the client must:
+1. Store the nonce used in the request
+2. Use the same nonce to decrypt the response
+
+=============================================================================
+ISSUE 4: STATUS CODES INCOMPLETE
+=============================================================================
+
+The 01_Status_Codes.md file is missing many status codes defined in protocol.h.
+
+Missing codes from protocol.h:
+
+HEADER ERRORS (complete list):
+| Code | Name | Description |
+|------|------|-------------|
+| 0 | NO_ERROR | No error |
+| 1 | ERROR_INVALID_CLOUD_ID | Invalid cloud identifier |
+| 2 | ERROR_INVALID_SPLIT_ID | Invalid split field |
+| 3 | ERROR_INVALID_RAIDA_ID | RAIDA ID out of range |
+| 4 | ERROR_INVALID_SHARD_ID | Invalid shard field |
+| 5 | ERROR_INVALID_COMMAND_GROUP | Unknown command group |
+| 6 | ERROR_INVALID_COMMAND | Unknown command code |
+| 7 | ERROR_INVALID_COIN_ID | Unsupported coin/token type |
+| 8 | ERROR_COIN_NOT_FOUND | Coin not found in database |
+| 15 | ERROR_INVALID_UDP_FRAME_COUNT | Invalid UDP frame count |
+| 16 | ERROR_INVALID_PACKET_LENGTH | Packet too short |
+| 17 | ERROR_UDP_FRAME_TIMEOUT | UDP frame not received in time |
+| 18 | ERROR_WRONG_RAIDA | Request sent to wrong RAIDA |
+| 20 | ERROR_SHARD_NOT_AVAILABLE | Shard not available |
+| 25 | ERROR_ENCRYPTION_COIN_NOT_FOUND | Encryption key coin not found |
+| 27 | ERROR_INVALID_ENCRYPTION_CODE | Unknown encryption type |
+| 33 | ERROR_INVALID_EOF | Missing terminator bytes |
+| 34 | ERROR_INVALID_ENCRYPTION | Encryption validation failed |
+| 36 | ERROR_EMPTY_REQUEST | Empty request body |
+| 37 | ERROR_INVALID_CRC | Challenge CRC mismatch |
+| 38 | ERROR_ADMIN_AUTH | Admin authentication failed |
+| 39 | ERROR_COINS_NOT_DIV | Coins not divisible |
+| 40 | ERROR_INVALID_SN_OR_DENOMINATION | Invalid SN or denomination |
+| 41 | ERROR_PAGE_IS_NOT_RESERVED | Page not reserved |
+
+TICKET ERRORS:
+| Code | Name | Description |
+|------|------|-------------|
+| 42 | ERROR_NO_TICKET_SLOT | No ticket slot available |
+| 43 | ERROR_NO_TICKET_FOUND | Ticket not found |
+| 44 | ERROR_TICKET_CLAIMED_ALREADY | Ticket already claimed |
+
+COIN ERRORS:
+| Code | Name | Description |
+|------|------|-------------|
+| 45 | ERROR_TOO_MANY_COINS | Too many coins in request |
+| 46 | ERROR_INVALID_SHARD | Invalid shard |
+| 47 | ERROR_DELETE_COINS | Error deleting coins |
+| 48 | ERROR_LEGACY_DB | Legacy database error |
+
+CROSSOVER/TRADE ERRORS:
+| Code | Name | Description |
+|------|------|-------------|
+| 49 | ERROR_CROSSOVER_FULL | Crossover queue full |
+| 50 | ERROR_INVALID_TRADE_COIN | Invalid trade coin |
+| 51 | ERROR_TRADE_LOCKER_NOT_FOUND | Trade locker not found |
+| 52 | ERROR_NO_PRIVATE_KEY | No private key available |
+
+OTHER ERRORS:
+| Code | Name | Description |
+|------|------|-------------|
+| 89 | ERROR_NOT_IMPLEMENTED | Command not implemented |
+| 90 | ERROR_BAD_COINS | Bad coins in request |
+| 148 | ERROR_TRADE_LOCKER_EXISTS | Trade locker already exists |
+| 149 | ERROR_NO_TRADE_LOCKER | No trade locker found |
+| 150 | STATUS_WAITING | Operation waiting/pending |
+| 152 | ERROR_NO_BTC_IN_WALLET | No BTC in wallet |
+| 153 | ERROR_FEW_COINS_IN_LOCKER | Too few coins in locker |
+| 154 | ERROR_LOCKER_USED | Locker already in use |
+| 160 | ERROR_REQUEST_RATE | Request rate limit exceeded |
+
+PAYMENT ERRORS:
+| Code | Name | Description |
+|------|------|-------------|
+| 167 | ERROR_PAYMENT_PROCESSING | Payment still processing |
+| 168 | ERROR_PAYMENT_INSUFFICIENT | Insufficient payment |
+| 169 | ERROR_PAYMENT_REQUIRED | Payment required |
+
+TRANSACTION ERRORS:
+| Code | Name | Description |
+|------|------|-------------|
+| 177 | ERROR_TXN_PROCESSED | Transaction already processed |
+| 178 | ERROR_CRYPTO_CONNECT | Crypto connection error |
+| 179 | ERROR_LOCKER_EMPTY_OR_NOT_EXISTS | Locker empty or doesn't exist |
+| 180 | ERROR_PROXY_CONNECT | Proxy connection error |
+| 181 | ERROR_PRICE | Price error |
+| 182 | ERROR_NO_COINS | No coins available |
+| 183 | STATUS_TX_SEEN | Transaction seen |
+| 184 | ERROR_NXRECORD | Record not found |
+| 185 | ERROR_NXDOMAIN | Domain not found |
+| 186 | ERROR_UNKNOWN | Unknown error |
+| 187 | ERROR_PROXY | Proxy error |
+| 188 | ERROR_KEY_BUILD | Key build error |
+| 189 | ERROR_EXTERNAL_BACKEND | External backend error |
+| 190 | ERROR_TX_EMPTY | Transaction empty |
+| 191 | ERROR_TX_NOT_EXIST | Transaction doesn't exist |
+| 192 | ERROR_AMOUNT_MISMATCH | Amount mismatch |
+| 193 | ERROR_NO_ENTRY | No entry found |
+
+FILESYSTEM/KEY ERRORS:
+| Code | Name | Description |
+|------|------|-------------|
+| 194 | ERROR_FILESYSTEM | Filesystem error |
+| 195 | ERROR_INVALID_KEY_START | Invalid key start |
+| 196 | ERROR_INVALID_KEY_LENGTH | Invalid key length |
+| 197 | ERROR_COIN_LOAD | Coin load error |
+| 198 | ERROR_INVALID_PARAMETER | Invalid parameter |
+| 199 | ERROR_INVALID_PAN | Invalid PAN |
+| 200 | ERROR_INVALID_AN | Invalid AN |
+| 201 | ERROR_FILE_EXISTS | File already exists |
+| 202 | ERROR_FILE_NOT_EXIST | File doesn't exist |
+| 203 | ERROR_INVALID_TRANSACTION | Invalid transaction |
+| 204 | ERROR_BLOCKCHAIN | Blockchain error |
+| 205 | ERROR_ASSEMBLE | Assembly error |
+| 206 | ERROR_RAIDA_TIMEOUT | RAIDA timeout during Fix |
+| 207 | ERROR_RAIDA_CONNECTION / ERROR_INVALID_HMAC | Connection error or HMAC invalid |
+
+FIND SERVICE CODES:
+| Code | Name | Description |
+|------|------|-------------|
+| 208 | STATUS_FIND_NEITHER | Neither AN nor PAN found |
+| 209 | STATUS_FIND_ALL_AN | All ANs matched |
+| 210 | STATUS_FIND_ALL_PAN | All PANs matched |
+| 211 | STATUS_FIND_MIXED | Mixed AN/PAN results |
+
+SUCCESS CODES:
+| Code | Name | Description |
+|------|------|-------------|
+| 241 | STATUS_ALL_PASS | All tokens passed |
+| 242 | STATUS_ALL_FAIL | All tokens failed |
+| 243 | STATUS_MIXED | Mixed results (see bitfield) |
+| 250 | STATUS_SUCCESS | Generic success |
+
+SYSTEM ERRORS:
+| Code | Name | Description |
+|------|------|-------------|
+| 252 | ERROR_INTERNAL | Internal server error |
+| 253 | ERROR_NETWORK | Network error |
+| 254 | ERROR_MEMORY_ALLOC | Memory allocation failed |
+| 255 | ERROR_INVALID_ROUTING | Invalid routing |
+
+=============================================================================
+ISSUE 5: CLIENT SIGNATURE VALIDATION LOGIC BY TYPE
+=============================================================================
+
+The documentation should explain how clients validate signatures differently:
+
+TYPE 0 VALIDATION:
+```python
+def validate_type0_response(response_signature, sent_challenge):
+    # For Type 0, signature should equal the challenge we sent
+    return response_signature == sent_challenge
+```
+
+TYPES 1 & 2 VALIDATION:
+```python
+def validate_type1_2_response(response_signature, sent_challenge, encryption_an):
+    # For Types 1/2, signature = challenge XOR AN
+    expected = bytes(a ^ b for a, b in zip(sent_challenge, encryption_an))
+    return response_signature == expected
+```
+
+=============================================================================
+RECOMMENDED DOCUMENTATION CHANGES
+=============================================================================
+
+1. Update 00_Overview.md to:
+   - Show signature calculation differs by encryption type
+   - Document that response body is encrypted for Types 1 & 2
+   - Clarify that same key/nonce used for response as request
+
+2. Update 01_Status_Codes.md to:
+   - Include ALL status codes from protocol.h
+   - Organize by category (header, ticket, coin, payment, etc.)
+   - Add retry guidance for each code
+
+3. Add response handling per encryption type section:
+   - Type 0: Signature = challenge, body = plaintext
+   - Type 1: Signature = challenge XOR AN, body = AES-CTR encrypted
+   - Type 2: Signature = challenge XOR AN, body = AES-CTR encrypted
+
+=============================================================================
+COMPLETE RESPONSE FORMAT BY TYPE
+=============================================================================
+
+TYPE 0 - UNENCRYPTED RESPONSE:
+```
+Response = [Header 32B][Body (plaintext)][0x3E3E]
+
+Header bytes 16-31 = sent_challenge (direct copy)
+Body = plaintext command output
+```
+
+TYPE 1/2 - ENCRYPTED RESPONSE:
+```
+Response = [Header 32B][Body (encrypted)][0x3E3E]
+
+Header bytes 16-31 = challenge XOR encryption_an
+Body = AES-CTR(command_output, encryption_an, nonce)
+
+Where nonce = request header bytes 24-31 + 8 zero bytes
+```
+
+=============================================================================
+END OF ANALYSIS
+=============================================================================

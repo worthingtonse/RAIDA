@@ -1,0 +1,6 @@
+Notes to Opus (denominations):
+- Keep smallest name as “Nano (aka Satoshi)” to align with user’s guidance; avoid dropping Satoshi outright, just clarify it’s an alias and not Bitcoin-related.
+- Reduce alias sprawl: one primary name + a short alias column is enough; too many aliases risk AI confusion.
+- State limits prominently: valid codes -8..+6 only; cannot break below -8 or join above +6.
+- Be consistent: stick to one naming scheme (e.g., Nano, Deci-Micro, Micro, Deci-Milli, Tick/Basis Point, Mil, Cent, Dime, One, Ten, Hundred, Thousand, Ten-K, Hundred-K, Million). Avoid rebranding in multiple tables.
+- Add a single compact table mapping Hex/Dec/Name/Value, and put the 10^code formula and “int8_t two’s-complement” note at the top.

@@ -1,0 +1,24 @@
+Header bytes 16–31 (32-byte request header) by encryption type — based on RAIDAX server code (protocol.c validate_header/validate_decrypt_body, protocol.h):
+
+Type 0 – ENCRYPTION_TYPE_NONE (legacy unencrypted)
+- Header bytes: 16=0; 17–21 ignored; 22–23 body length; 24–29 ignored; 30–31 echo. Server zeroes the nonce buffer; no denomination/SN are read.
+- Body rules: Challenge/CRC are still required. Server copies body[0:16] as challenge and verifies CRC32 over bytes 0–11 matches bytes 12–15; rejects if missing/incorrect.
+
+Type 1 – ENCRYPTION_TYPE_AES (legacy single coin)
+- Header bytes: 16=1; 17=denomination; 18–21=SN (big-endian); 22–23 body length; 24–31 eight-byte nonce (first 6 bytes typically random, last 2 are the echo bytes). Echo is also read separately from 30–31.
+- Key source: coin AN at (den, SN) -> 16-byte key.
+- Body rules: Ciphertext is CTR-decrypted with the 16-byte AN and the 8-byte nonce. Challenge hash is derived as (decrypted[0:16] XOR key); CRC32 over decrypted[0:11] must match decrypted[12:15].
+
+Type 2 – ENCRYPTION_TYPE_LOCKER (legacy locker coin)
+- Header bytes: same layout as Type 1 (16=2; denom/SN in 17–21; body length 22–23; 8-byte nonce 24–31 with echo in last two bytes).
+- Key source: locker AN looked up by the 5-byte prefix at 17–21; 16-byte key.
+- Body rules: Same as Type 1 (CTR decrypt, challenge XOR key, CRC check).
+
+Type 3 – reserved/unused
+- Not accepted; server returns ERROR_INVALID_ENCRYPTION.
+
+Documentation updates needed:
+- Replace the single generic mapping for bytes 16–31 with per-type layouts (0/1/2 at minimum), clearly showing which fields are ignored vs. required and the exact nonce/echo usage.
+- Explicitly state that Type 0 still requires challenge + CRC in the body even though it is unencrypted.
+- Add Python header builders per type: (a) Type 0 with zero nonce, echo at 30–31; (b) Type 1 with denom/SN filled, 8-byte nonce (6 random + 2 echo), body length at 22–23; (c) Type 2 same as Type 1 but locker lookup noted. Show body construction for challenge/CRC for Type 0 and encrypted challenge/CRC for Types 1/2.
+- Note that Types 0/1/2 use the 32-byte header; modern types (4/5/7) use 48-byte headers and are documented elsewhere.

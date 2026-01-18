@@ -1,0 +1,352 @@
+=============================================================================
+RAIDA HEADER DOCUMENTATION ANALYSIS v2 - ENCRYPTION TYPES 0, 1, 2 ONLY
+=============================================================================
+
+SCOPE: Types 0, 1, and 2 only (32-byte headers)
+       Type 3 removed (not implemented in server)
+       Types 4, 5, 7 removed (eliminated from protocol)
+
+=============================================================================
+SUMMARY OF REQUIRED CHANGES
+=============================================================================
+
+1. Remove Type 3 from all documentation (server returns ERROR_INVALID_ENCRYPTION)
+2. Split header documentation by encryption type (0, 1, 2)
+3. Fix nonce size: 8 bytes (24-31), NOT 6 bytes as currently documented
+4. Document that bytes 30-31 serve DUAL PURPOSE (echo AND nonce bytes 6-7)
+5. Explicitly document that Type 0 REQUIRES challenge/CRC in body
+6. Add separate Python examples per encryption type
+
+=============================================================================
+HEADER BYTE MAP - COMMON TO ALL TYPES (Bytes 0-15)
+=============================================================================
+
+```
+Offset: 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+        VR SP RI SH CG CM ID ID BF AP AP CP TR AI PI PC
+```
+
+| Offset | Size | Field | Description | Value |
+|--------|------|-------|-------------|-------|
+| 0      | 1    | VR    | Protocol Version | 0x01 |
+| 1      | 1    | SP    | Split ID | 0x00 (reserved) |
+| 2      | 1    | RI    | RAIDA ID | 0-24 |
+| 3      | 1    | SH    | Shard ID | 0x00 (reserved) |
+| 4      | 1    | CG    | Command Group | See commands |
+| 5      | 1    | CM    | Command Code | See commands |
+| 6-7    | 2    | ID    | Coin ID | 0x0001 (big-endian) |
+| 8      | 1    | BF    | Bitfield | 0x01 |
+| 9-10   | 2    | AP    | Application Port | 0x0000 (reserved) |
+| 11     | 1    | CP    | Compression | 0x00 (reserved) |
+| 12     | 1    | TR    | Translation | 0x00 (reserved) |
+| 13     | 1    | AI    | AI Mode | 0x00 (reserved) |
+| 14     | 1    | PI    | Packet Index | 0x00 (UDP multi-packet) |
+| 15     | 1    | PC    | Packet Count | 0x01 (UDP multi-packet) |
+
+=============================================================================
+TYPE 0 - UNENCRYPTED (32 bytes)
+=============================================================================
+
+Bytes 16-31 for Type 0:
+```
+Offset: 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F
+        EN -- -- -- -- -- BL BL -- -- -- -- -- -- EC EC
+```
+
+| Offset | Size | Field | Server Handling | Client Action |
+|--------|------|-------|-----------------|---------------|
+| 16     | 1    | EN    | Must be 0x00 | Set to 0x00 |
+| 17-21  | 5    | --    | IGNORED | Set to 0x00 |
+| 22-23  | 2    | BL    | Body length (big-endian) | Set to actual body size |
+| 24-29  | 6    | --    | IGNORED | Set to 0x00 |
+| 30-31  | 2    | EC    | Echo bytes returned in response | Client tracking value |
+
+Server code (protocol.c:545-558):
+```c
+ci->encryption_type = buf[16];
+ci->body_size = (buf[22] << 8) | buf[23];
+ci->e0 = buf[30];
+ci->e1 = buf[31];
+memset(ci->nonce, 0, 16);  // Nonce is all zeros for Type 0
+ci->encryption_denomination = 0;
+ci->encryption_sn = 0;
+```
+
+BODY FORMAT for Type 0:
+```
+[Challenge 16 bytes][Command Payload][Terminator 0x3E3E]
+```
+
+CRITICAL: Type 0 REQUIRES the 16-byte challenge even though unencrypted!
+
+Server validates challenge (protocol.c:708-726):
+```c
+if (ci->encryption_type == ENCRYPTION_TYPE_NONE)
+{
+    memcpy(ci->challenge_hash, ci->body, 16);  // Direct copy
+
+    uint32_t crc = crc32b(ci->body, 12);
+    // Validates bytes 12-15 match computed CRC
+    if (b0 != ci->body[12] || b1 != ci->body[13] ||
+        b2 != ci->body[14] || b3 != ci->body[15])
+        return ERROR_INVALID_CRC;
+}
+```
+
+Python Example - Type 0:
+```python
+def build_type0_header(raida_id, command_group, command_code,
+                       body_length, echo):
+    header = bytearray(32)
+
+    # Routing (0-7)
+    header[0] = 0x01              # Version
+    header[1] = 0x00              # Split ID
+    header[2] = raida_id
+    header[3] = 0x00              # Shard ID
+    header[4] = command_group
+    header[5] = command_code
+    header[6:8] = (1).to_bytes(2, 'big')  # Coin ID
+
+    # Presentation (8-15)
+    header[8] = 0x01              # Bitfield
+    header[9:16] = b'\x00' * 7    # Reserved
+
+    # Encryption section (16-31) - Type 0
+    header[16] = 0x00             # Encryption type 0
+    header[17:22] = b'\x00' * 5   # Ignored
+    header[22:24] = body_length.to_bytes(2, 'big')
+    header[24:30] = b'\x00' * 6   # Ignored
+    header[30:32] = echo[:2]      # Echo bytes
+
+    return bytes(header)
+
+def build_type0_body(command_payload):
+    # Generate challenge: 12 random bytes + 4-byte CRC32
+    random_bytes = os.urandom(12)
+    crc = zlib.crc32(random_bytes) & 0xFFFFFFFF
+    crc_bytes = struct.pack('>I', crc)  # Big-endian
+    challenge = random_bytes + crc_bytes
+
+    # Body = challenge + payload + terminator
+    return challenge + command_payload + b'\x3e\x3e'
+```
+
+=============================================================================
+TYPE 1 - AES-128 SINGLE COIN (32 bytes)
+=============================================================================
+
+Bytes 16-31 for Type 1:
+```
+Offset: 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F
+        EN DN SN SN SN SN BL BL NO NO NO NO NO NO NO NO
+                                                  EC EC
+```
+
+| Offset | Size | Field | Server Handling | Client Action |
+|--------|------|-------|-----------------|---------------|
+| 16     | 1    | EN    | Must be 0x01 | Set to 0x01 |
+| 17     | 1    | DN    | Key coin denomination | Key coin's denomination |
+| 18-21  | 4    | SN    | Key coin serial (big-endian) | Key coin's serial number |
+| 22-23  | 2    | BL    | Body length (big-endian) | Encrypted body size |
+| 24-31  | 8    | NO    | 8-byte nonce for AES-CTR | Random bytes |
+| 30-31  | 2    | EC    | Echo bytes (OVERLAPS with nonce!) | Client tracking value |
+
+IMPORTANT: Bytes 30-31 serve DUAL PURPOSE:
+- They are the last 2 bytes of the 8-byte nonce (used for decryption)
+- They are also read separately as echo bytes (returned in response)
+
+Server code (protocol.c:559-601):
+```c
+ci->encryption_type = buf[16];
+ci->encryption_denomination = (int8_t)buf[17];
+ci->encryption_sn = get_sn(&buf[18]);  // 4 bytes big-endian
+ci->body_size = (buf[22] << 8) | buf[23];
+ci->e0 = buf[30];
+ci->e1 = buf[31];
+
+memset(ci->nonce, 0, 16);      // Initialize 16-byte internal buffer
+memcpy(ci->nonce, &buf[24], 8); // Copy 8 bytes from header
+
+// Key lookup: get AN from coin (denomination, serial_number)
+page = get_page_by_sn_lock(ci->encryption_denomination, ci->encryption_sn);
+memcpy(ci->encryption_an, &page->data[sn_idx * 17], 16);
+```
+
+BODY FORMAT for Type 1:
+```
+[Encrypted: Challenge 16 bytes + Command Payload][Terminator 0x3E3E]
+```
+
+Note: Terminator (0x3E3E) is NOT encrypted.
+
+Server decryption and validation (protocol.c:728-754):
+```c
+// Decrypt body (excluding 2-byte terminator)
+crypt_ctr(ci->encryption_an, ci->body, ci->body_size - 2, ci->nonce);
+
+// Challenge hash = decrypted[0:16] XOR key
+for (int i = 0; i < 16; i++)
+    ci->challenge_hash[i] = ci->body[i] ^ ci->encryption_an[i];
+
+// Validate CRC
+uint32_t crc = crc32b(ci->body, 12);
+// Check bytes 12-15 match computed CRC
+```
+
+Python Example - Type 1:
+```python
+def build_type1_header(raida_id, command_group, command_code,
+                       key_denomination, key_serial, body_length,
+                       nonce_8bytes, echo):
+    header = bytearray(32)
+
+    # Routing (0-7) - same as Type 0
+    header[0] = 0x01
+    header[1] = 0x00
+    header[2] = raida_id
+    header[3] = 0x00
+    header[4] = command_group
+    header[5] = command_code
+    header[6:8] = (1).to_bytes(2, 'big')
+
+    # Presentation (8-15) - same as Type 0
+    header[8] = 0x01
+    header[9:16] = b'\x00' * 7
+
+    # Encryption section (16-31) - Type 1
+    header[16] = 0x01                           # Encryption type 1
+    header[17] = key_denomination & 0xFF        # Denomination (int8)
+    header[18:22] = key_serial.to_bytes(4, 'big')
+    header[22:24] = body_length.to_bytes(2, 'big')
+
+    # Nonce (24-31) with echo overlap
+    header[24:30] = nonce_8bytes[:6]            # First 6 bytes of nonce
+    header[30:32] = echo[:2]                    # Echo (also nonce bytes 6-7)
+
+    return bytes(header)
+
+def build_type1_body(command_payload, key_an_16bytes, nonce_8bytes, echo):
+    # Build 16-byte internal nonce (8 from header + 8 zeros)
+    nonce_16 = nonce_8bytes[:6] + echo[:2] + b'\x00' * 8
+
+    # Generate challenge
+    random_bytes = os.urandom(12)
+    crc = zlib.crc32(random_bytes) & 0xFFFFFFFF
+    challenge = random_bytes + struct.pack('>I', crc)
+
+    # Plaintext = challenge + payload
+    plaintext = challenge + command_payload
+
+    # Encrypt with AES-128-CTR
+    ciphertext = aes_ctr_encrypt(plaintext, key_an_16bytes, nonce_16)
+
+    # Add unencrypted terminator
+    return ciphertext + b'\x3e\x3e'
+```
+
+=============================================================================
+TYPE 2 - AES-128 LOCKER (32 bytes)
+=============================================================================
+
+Type 2 has IDENTICAL header structure to Type 1. The only difference is
+how the server looks up the encryption key:
+
+- Type 1: Key coin looked up in regular page store
+- Type 2: Key coin looked up in locker index
+
+Bytes 16-31 for Type 2: Same as Type 1
+
+| Offset | Size | Field | Server Handling | Client Action |
+|--------|------|-------|-----------------|---------------|
+| 16     | 1    | EN    | Must be 0x02 | Set to 0x02 |
+| 17     | 1    | DN    | Locker coin denomination | Locker coin's denomination |
+| 18-21  | 4    | SN    | Locker coin serial (big-endian) | Locker coin's serial number |
+| 22-23  | 2    | BL    | Body length (big-endian) | Encrypted body size |
+| 24-31  | 8    | NO    | 8-byte nonce for AES-CTR | Random bytes |
+| 30-31  | 2    | EC    | Echo bytes (OVERLAPS with nonce!) | Client tracking value |
+
+Server code difference (protocol.c:580-587):
+```c
+if (ci->encryption_type == ENCRYPTION_TYPE_LOCKER)
+{
+    // Type 2: Look up in locker index
+    ie = get_coins_from_index_by_prefix(&buf[17]);
+    memcpy(ci->encryption_an, ie->an, 16);
+}
+else
+{
+    // Type 1: Look up in page store
+    page = get_page_by_sn_lock(ci->encryption_denomination, ci->encryption_sn);
+    memcpy(ci->encryption_an, &page->data[sn_idx * 17], 16);
+}
+```
+
+Body format, encryption, and challenge validation: Same as Type 1.
+
+=============================================================================
+CHALLENGE CONSTRUCTION (ALL TYPES)
+=============================================================================
+
+The challenge is a 16-byte field at the start of every request body:
+
+```
+Challenge format: [12 random bytes][4-byte CRC32 of the 12 bytes]
+
+Byte:   0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+       |<-------- Random Data -------->|<-- CRC32 -->|
+```
+
+CRC32 is stored in BIG-ENDIAN format.
+
+For Type 0: Challenge is sent in plaintext, validated directly
+For Types 1/2: Challenge is encrypted; after decryption, server XORs with
+               key to get challenge_hash for response
+
+Python challenge generation:
+```python
+import os
+import zlib
+import struct
+
+def generate_challenge():
+    random_data = os.urandom(12)
+    crc = zlib.crc32(random_data) & 0xFFFFFFFF
+    crc_bytes = struct.pack('>I', crc)  # Big-endian
+    return random_data + crc_bytes
+```
+
+=============================================================================
+DOCUMENTATION FILE STRUCTURE RECOMMENDATION
+=============================================================================
+
+02_Request_Headers/
+  00_Overview.md              # Summary table of all types
+  01_Common_Fields.md         # Bytes 0-15 (same for all types)
+  02_Type_0_Unencrypted.md    # Type 0 specific (bytes 16-31 + body)
+  03_Type_1_AES_128.md        # Type 1 specific (bytes 16-31 + body)
+  04_Type_2_Locker.md         # Type 2 specific (bytes 16-31 + body)
+
+05_Challenge_Response/
+  00_CRC32.md                 # CRC32 algorithm
+  01_Challenge_Construction.md # 12 random + 4 CRC format
+  02_Challenge_Validation.md  # How server validates (Type 0 vs 1/2)
+
+=============================================================================
+SUMMARY TABLE - ENCRYPTION TYPES
+=============================================================================
+
+| Type | Name | Header | Key Source | Nonce | Challenge | CRC |
+|------|------|--------|------------|-------|-----------|-----|
+| 0    | None | 32B    | N/A        | Zeros | Plaintext | Yes |
+| 1    | AES  | 32B    | Coin AN    | 8B+8Z | Encrypted | Yes |
+| 2    | Locker| 32B   | Locker AN  | 8B+8Z | Encrypted | Yes |
+
+Key:
+- 8B+8Z = 8 bytes from header + 8 zero bytes (16-byte internal nonce)
+- All types require 16-byte challenge in body
+- All types require valid CRC32 in challenge bytes 12-15
+
+=============================================================================
+END OF ANALYSIS v2
+=============================================================================

@@ -1,0 +1,15 @@
+Issues with Response Body/Signature overview (per protocol.c / protocol.h, types 0/1/2 only in scope):
+
+1) Response header size: For types 0/1/2 it is 32 bytes (legacy path). Docs say “always 32 bytes” which is fine now that modern types are out of scope, but make explicit this applies to encryption types 0, 1, 2 (legacy). Type 3 is unsupported.
+2) Signature field meaning: Bytes 16–31 are not a generic “Signature = Challenge XOR Encryption_AN” for all types. Actual behavior:
+   - Type 0: challenge_hash is a direct copy of the 16-byte challenge from the request body (no XOR).
+   - Types 1/2: challenge_hash = decrypted_body[0:16] XOR encryption_an (16-byte AN). The decrypted_body includes the original challenge+CRC; CRC is validated before setting the hash.
+   - Therefore, the current doc statement is wrong for Type 0 and too generic; it must be made type-specific.
+3) Body handling differences:
+   - Type 0: Body must contain 16-byte challenge (12 random + 4-byte CRC32 BE), then payload, then 0x3E3E terminator. CRC is checked on plaintext. challenge_hash copied directly to response bytes 16–31.
+   - Types 1/2: Body is encrypted (CTR) including the challenge+CRC. Server decrypts (excluding trailer), validates CRC on decrypted bytes 0–15, then sets challenge_hash = decrypted[0:16] XOR key and echoes it in response bytes 16–31. Terminator 0x3E3E is plaintext.
+4) Body size field: Response bytes 9–11 are payload size (final_body_size in prepare_response). This is the size of the body returned (payload + trailer), not including the response header.
+5) Echo: Response bytes 6–7 echo ci->e0/e1 from request header bytes 30–31 (legacy path). Note dual-purpose with nonce for types 1/2.
+6) Status codes: Current 01_Status_Codes.md is missing many codes from protocol.h (full enum STATUS_CODE). It should enumerate all codes in protocol.h (0, 1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 18, 20, 25, 27, 33, 34, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 89, 90, 148, 149, 150, 152, 153, 154, 160, 167, 168, 169, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 241, 242, 243, 250, 252, 253, 254, 255).
+7) Type 3: Not implemented; server returns ERROR_INVALID_ENCRYPTION if encountered. Doc should note it as reserved/unsupported.
+8) Modern types (4/5/7) are out of scope per direction; ensure the overview omits them.

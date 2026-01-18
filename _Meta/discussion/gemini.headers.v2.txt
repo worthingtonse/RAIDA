@@ -1,0 +1,86 @@
+This document (v2) clarifies the server-side implementation of the 32-byte request header, focusing only on encryption types 0, 1, 2, and 3 as requested. It is based on analysis of the `RAIDAX-master` source code (`protocol.c`) and supersedes the previous version by incorporating feedback and user requirements.
+
+## 1. Executive Summary
+
+The analysis of the server code confirms the initial suspicion: the 32-byte header format is not static. The usage of bytes 16-31 changes based on the encryption type. The current documentation is incorrect regarding several key implementation details.
+
+- **Primary Findings:**
+    1.  **Type-Dependent Fields:** Bytes 17-31 have different meanings for unencrypted vs. encrypted requests.
+    2.  **Incorrect Nonce Size:** The server uses an **8-byte nonce** (from offsets 24-31) for encryption, not 6 bytes as documented.
+    3.  **Nonce/Echo Overlap:** The Echo bytes (30-31) are also the last two bytes of the 8-byte nonce. This is a critical, undocumented detail.
+    4.  **Challenge is Mandatory:** A 16-byte Challenge + 4-byte CRC structure is required at the beginning of the *request body* for **all** legacy types (0, 1, and 2).
+    5.  **Type 3 is Unused:** The server code does not handle Type 3; it should be considered "Reserved."
+
+## 2. Header Specification by Encryption Type
+
+The following tables describe the server's actual implementation of the 32-byte header. Bytes 0-15 are consistent and can be considered common to all types.
+
+---
+
+### **Type 0 (Unencrypted)**
+Server logic expects a minimal header, as no key lookup is required.
+
+| Offset | Size | Field | Server-Side Handling | Client-Side Action |
+| :--- | :--- | :--- | :--- | :--- |
+| 16 | 1 | Encryption Type | **Required**. Validates it is `0x00`. | Set to `0x00`. |
+| 17-21 | 5 | DN & SN | **Ignored**. | Set to zeros. |
+| 22-23 | 2 | Body Length | **Required**. | Set to length of the body. |
+| 24-29 | 6 | Nonce (partial) | **Ignored**. | Set to zeros. |
+| 30-31 | 2 | Echo | **Required**. Read and echoed in the response. | Set to client tracking value. |
+
+---
+
+### **Types 1 & 2 (AES-128 & Locker)**
+Server logic uses these fields to look up the AES key and configure the decryption cipher.
+
+| Offset | Size | Field | Server-Side Handling | Client-Side Action |
+| :--- | :--- | :--- | :--- | :--- |
+| 16 | 1 | Encryption Type | **Required**. Validates it is `0x01` or `0x02`. | Set to `0x01` or `0x02`. |
+| 17 | 1 | Key Denomination | **Required**. Used for key lookup. | Set to key coin's denomination. |
+| 18-21 | 4 | Key Serial Number| **Required**. Used for key lookup. | Set to key coin's serial number. |
+| 22-23 | 2 | Body Length | **Required**. | Set to length of the encrypted body. |
+| 24-31 | 8 | **Nonce** | **Required**. Reads all **8 bytes** for AES-CTR. | Provide 8 random bytes. |
+| 30-31 | 2 | **Echo** | **Required**. Read and echoed. (Overlaps with last 2 bytes of nonce). | Set to client tracking value. |
+
+---
+
+### **Type 3 (Reserved)**
+The user specified that Type 3 should be accounted for. The server code has no logic for this type.
+
+| Offset | Size | Field | Server-Side Handling | Client-Side Action |
+| :--- | :--- | :--- | :--- | :--- |
+| 16 | 1 | Encryption Type | **Rejected**. Falls through to an `ERROR_INVALID_ENCRYPTION` case. | **Do Not Use.** This type should not be sent. |
+
+## 3. Mandatory Body Structure (Types 0, 1, 2)
+
+A critical, undocumented requirement is that for all 32-byte header types, the request **body** must be prefixed with a 16-byte challenge structure. The `get_body_payload()` function in `protocol.c` skips these 16 bytes to find the actual command payload.
+
+-   **Structure:**
+    -   Bytes 0-11: Random challenge data.
+    -   Bytes 12-15: A 4-byte CRC32 checksum calculated over the first 12 bytes.
+-   **Server Validation:**
+    -   **Type 0:** The server validates the CRC on the plaintext body.
+    -   **Types 1 & 2:** The server decrypts the entire body first, then validates the CRC on the resulting plaintext challenge.
+
+## 4. Recommendations for Documentation Overhaul
+
+1.  **Create Per-Type Specifications:** The main `01_Header_32_Byte.md` file should be split or refactored to have distinct sections or tables for Type 0, Types 1/2, and Type 3. This is the only way to avoid ambiguity.
+
+2.  **Correct Field Definitions:**
+    -   Update the nonce field for Types 1/2 to show it is **8 bytes long** (offsets 24-31).
+    -   Explicitly document the **overlap** where the Echo bytes are also the last two bytes of the nonce.
+
+3.  **Define Type 3:** Document Type 3 as "Reserved for future use. Clients MUST NOT send this type. Servers WILL REJECT it."
+
+4.  **Add Body Structure Documentation:** Create a new document or section that clearly explains the mandatory 16-byte Challenge/CRC prefix in the request body for all these types.
+
+5.  **Provide New Python Examples:** The existing Python example is misleading. New examples should be provided for constructing a Type 0 request and a Type 1/2 request, correctly showing which fields are zeroed out vs. populated.
+
+    **Example Snippet for Type 1/2 Nonce/Echo:**
+    ```python
+    # For a Type 1 or 2 header
+    nonce_bytes = os.urandom(8) # Generate a full 8-byte nonce
+    header[24:32] = nonce_bytes
+    # The echo value is implicitly the last two bytes of the nonce
+    echo_value = nonce_bytes[6:]
+    ```

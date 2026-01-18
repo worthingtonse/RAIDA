@@ -1,0 +1,141 @@
+This file details issues found in the documentation for RAIDA response headers, bodies, and status codes, based on analysis of the `RAIDAX-master` source code (`protocol.c` and `protocol.h`).
+
+## 1. Response Body & Header Analysis
+
+The primary issue is that the documentation does not clearly describe how the response is constructed, and it incorrectly implies the response body contains a challenge, which it does not.
+
+### Issue 1: The Response Body Contains No Challenge/CRC
+
+The user asked how the encryption type changes the body and if it has a challenge like the request.
+
+**Finding:** The response body's structure is `[payload][trailer]`. It **does not** contain a Challenge/CRC structure like the request body. The server's "answer" to the client's challenge is the 16-byte `challenge_hash` placed in the **response header**.
+
+-   **For Encryption Type 0:** The payload is sent in **plaintext**.
+-   **For Encryption Types 1 & 2:** The payload is **encrypted** using AES-CTR. The server uses the same AN (key) and 8-byte nonce that the client provided in the request to encrypt the response payload.
+
+**Recommendation:** The `00_Overview.md` file should be updated to explicitly state that the response body only contains the command output and does not have a challenge/CRC section.
+
+### Issue 2: Incomplete "Signature" Calculation in `00_Overview.md`
+
+The documentation states: `Signature = Challenge XOR Encryption_AN`. This is incomplete.
+
+**Finding:** The `challenge_hash` (what the doc calls `Signature`) in the response header is generated differently based on the encryption type.
+
+-   **For Types 1 & 2:** The formula `decrypted_challenge XOR AN` is correct.
+-   **For Type 0:** There is no AN. The server simply **copies the 16-byte challenge** it received from the client's request body directly into the response header's `challenge_hash` field.
+
+**Recommendation:** The "Signature Field" section in `00_Overview.md` must be updated to describe the behavior for both Type 0 and Types 1/2.
+
+### Issue 3: Minor Errors in Response Header `00_Overview.md`
+
+-   **Execution Time Unit:** The documentation claims the 4-byte execution time (`EX`) is in **nanoseconds**. The code calculates it in **microseconds**. This is a factual error.
+-   **Field Name Mismatches:** The field names in the documentation's byte map (`RI`, `SS`, `CG`, `EC`, `SZ`, `EX`, `HS`) differ from the variable names used in the code (`raida_no`, `status`, `cgroup`, `e0/e1`, `output_size`, `exec_time`, `challenge_hash`). While not a critical error, aligning these would improve clarity.
+
+---
+
+## 2. Status Code Analysis
+
+The `01_Status_Codes.md` file is critically incomplete. It is missing the vast majority of status codes defined in the server's `protocol.h` file.
+
+### Complete Status Code List from `protocol.h`
+
+The following is the complete list of status codes that can be returned by the RAIDA. This should replace the content of `01_Status_Codes.md`.
+
+| Code | Name |
+|:---|:---|
+| 0 | NO_ERROR |
+| 1 | ERROR_INVALID_CLOUD_ID |
+| 2 | ERROR_INVALID_SPLIT_ID |
+| 3 | ERROR_INVALID_RAIDA_ID |
+| 4 | ERROR_INVALID_SHARD_ID |
+| 5 | ERROR_INVALID_COMMAND_GROUP |
+| 6 | ERROR_INVALID_COMMAND |
+| 7 | ERROR_INVALID_COIN_ID |
+| 8 | ERROR_COIN_NOT_FOUND |
+| 15 | ERROR_INVALID_UDP_FRAME_COUNT |
+| 16 | ERROR_INVALID_PACKET_LENGTH |
+| 17 | ERROR_UDP_FRAME_TIMEOUT |
+| 18 | ERROR_WRONG_RAIDA |
+| 20 | ERROR_SHARD_NOT_AVAILABLE |
+| 25 | ERROR_ENCRYPTION_COIN_NOT_FOUND |
+| 27 | ERROR_INVALID_ENCRYPTION_CODE |
+| 33 | ERROR_INVALID_EOF |
+| 34 | ERROR_INVALID_ENCRYPTION |
+| 36 | ERROR_EMPTY_REQUEST |
+| 37 | ERROR_INVALID_CRC |
+| 38 | ERROR_ADMIN_AUTH |
+| 39 | ERROR_COINS_NOT_DIV |
+| 40 | ERROR_INVALID_SN_OR_DENOMINATION |
+| 41 | ERROR_PAGE_IS_NOT_RESERVED |
+| 42 | ERROR_NO_TICKET_SLOT |
+| 43 | ERROR_NO_TICKET_FOUND |
+| 44 | ERROR_TICKET_CLAIMED_ALREADY |
+| 45 | ERROR_TOO_MANY_COINS |
+| 46 | ERROR_INVALID_SHARD |
+| 47 | ERROR_DELETE_COINS |
+| 48 | ERROR_LEGACY_DB |
+| 49 | ERROR_CROSSOVER_FULL |
+| 50 | ERROR_INVALID_TRADE_COIN |
+| 51 | ERROR_TRADE_LOCKER_NOT_FOUND |
+| 52 | ERROR_NO_PRIVATE_KEY |
+| 89 | ERROR_NOT_IMPLEMENTED |
+| 90 | ERROR_BAD_COINS |
+| 148 | ERROR_TRADE_LOCKER_EXISTS |
+| 149 | ERROR_NO_TRADE_LOCKER |
+| 150 | STATUS_WAITING |
+| 152 | ERROR_NO_BTC_IN_WALLET |
+| 153 | ERROR_FEW_COINS_IN_LOCKER |
+| 154 | ERROR_LOCKER_USED |
+| 160 | ERROR_REQUEST_RATE |
+| 167 | ERROR_PAYMENT_PROCESSING |
+| 168 | ERROR_PAYMENT_INSUFFICIENT |
+| 169 | ERROR_PAYMENT_REQUIRED |
+| 177 | ERROR_TXN_PROCESSED |
+| 178 | ERROR_CRYPTO_CONNECT |
+| 179 | ERROR_LOCKER_EMPTY_OR_NOT_EXISTS|
+| 180 | ERROR_PROXY_CONNECT |
+| 181 | ERROR_PRICE |
+| 182 | ERROR_NO_COINS |
+| 183 | STATUS_TX_SEEN |
+| 184 | ERROR_NXRECORD |
+| 185 | ERROR_NXDOMAIN |
+| 186 | ERROR_UNKNOWN |
+| 187 | ERROR_PROXY |
+| 188 | ERROR_KEY_BUILD |
+| 189 | ERROR_EXTERNAL_BACKEND |
+| 190 | ERROR_TX_EMPTY |
+| 191 | ERROR_TX_NOT_EXIST |
+| 192 | ERROR_AMOUNT_MISMATCH |
+| 193 | ERROR_NO_ENTRY |
+| 194 | ERROR_FILESYSTEM |
+| 195 | ERROR_INVALID_KEY_START |
+| 196 | ERROR_INVALID_KEY_LENGTH |
+| 197 | ERROR_COIN_LOAD |
+| 198 | ERROR_INVALID_PARAMETER |
+| 199 | ERROR_INVALID_PAN |
+| 200 | ERROR_INVALID_AN |
+| 201 | ERROR_FILE_EXISTS |
+| 202 | ERROR_FILE_NOT_EXIST |
+| 203 | ERROR_INVALID_TRANSACTION |
+| 204 | ERROR_BLOCKCHAIN |
+| 205 | ERROR_ASSEMBLE |
+| 206 | ERROR_RAIDA_TIMEOUT |
+| 207 | ERROR_RAIDA_CONNECTION / ERROR_INVALID_HMAC (Duplicate Code) |
+| 208 | STATUS_FIND_NEITHER |
+| 209 | STATUS_FIND_ALL_AN |
+| 210 | STATUS_FIND_ALL_PAN |
+| 211 | STATUS_FIND_MIXED |
+| 212 | ERROR_SECRET_NOT_FOUND |
+| 213 | ERROR_INVALID_CS_ID |
+| 214 | ERROR_KEY_DERIVATION_FAILED |
+| 215 | ERROR_INVALID_KEY_ID |
+| 216 | ERROR_KEY_NOT_FOUND |
+| 241 | STATUS_ALL_PASS |
+| 242 | STATUS_ALL_FAIL |
+| 243 | STATUS_MIXED |
+| 250 | STATUS_SUCCESS |
+| 252 | ERROR_INTERNAL |
+| 253 | ERROR_NETWORK |
+| 254 | ERROR_MEMORY_ALLOC |
+| 255 | ERROR_INVALID_ROUTING |
+*Note: Status code 207 is used for two different errors (`ERROR_RAIDA_CONNECTION` and `ERROR_INVALID_HMAC`). This is a potential issue in the protocol itself.*

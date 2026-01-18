@@ -1,0 +1,41 @@
+Denomination clarity (v2; includes nano/satoshi option):
+
+Core encoding (make explicit for AI):
+- Denomination byte is int8_t exponent for base 10. Value = 10^(code).
+- Wire encoding is a single byte; negative codes appear as two’s-complement hex (e.g., -1 = 0xFF, -8 = 0xF8). Always parse as signed exponent, not unsigned magnitude.
+- Valid currency range: codes -8..+6 (0xF8..0x06). Do not assume codes outside this are valid.
+
+Names and values (include nano/satoshi alias for the smallest):
+| Hex  | Dec | Name (preferred)      | Also known as | Value (CC)    | Notes |
+|------|-----|-----------------------|---------------|---------------|-------|
+| 0xF8 | -8  | Nano                  | Satoshi       | 0.00000001    | Smallest; cannot split further |
+| 0xF9 | -7  | Deci‑Micro            | Micro‑0.1     | 0.0000001     | 10× nano |
+| 0xFA | -6  | Micro                 |               | 0.000001      |       |
+| 0xFB | -5  | Deci‑Milli            | Milli‑0.1     | 0.00001       |       |
+| 0xFC | -4  | Basis Point           | Milli‑0.01    | 0.0001        | 1 bp = 0.01% |
+| 0xFD | -3  | Milli                 |               | 0.001         |       |
+| 0xFE | -2  | Cent                  |               | 0.01          |       |
+| 0xFF | -1  | Dime                  | Tenth         | 0.1           |       |
+| 0x00 | 0   | One                   | Unit          | 1             |       |
+| 0x01 | 1   | Ten                   |               | 10            |       |
+| 0x02 | 2   | Hundred               |               | 100           |       |
+| 0x03 | 3   | Thousand              |               | 1,000         |       |
+| 0x04 | 4   | Ten Thousand          |               | 10,000        |       |
+| 0x05 | 5   | Hundred Thousand      |               | 100,000       |       |
+| 0x06 | 6   | Million               |               | 1,000,000     | Largest; cannot join higher |
+
+Break/join rules (state limits):
+- Break: 1 coin of code N -> 10 coins of code N-1. Not allowed below N = -8.
+- Join: 10 coins of code N -> 1 coin of code N+1. Not allowed above N = +6.
+- Practical: adjust quantities by adding/subtracting 1 from the exponent per factor of 10.
+
+AI guidance to avoid confusion:
+- Treat the denomination byte as a signed exponent; do not reinterpret 0xF8..0xFF as large positives.
+- Use the table as the single source of truth; avoid inventing alternate names. If needed, prefer “Nano (aka Satoshi)” for -8.
+- When computing value, convert code to signed int8, then apply 10^(code); do not parse the string formats like “.0000-0001”.
+- For parsing/mapping, group fractions (<0) separately from whole (>=0) to reduce mistakes.
+
+Doc cleanups to recommend:
+- Fix typos (“into into”), standardize decimal formatting (e.g., 0.00000001).
+- Add the formula and signed-byte note at the top of 00_Overview.md.
+- Include the break/join limits and a concise table exactly as above.

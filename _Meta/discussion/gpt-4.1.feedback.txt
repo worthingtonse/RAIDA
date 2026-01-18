@@ -1,0 +1,4 @@
+Feedback on other model plans (scope: only types 0,1,2,3; 32-byte headers; no 48-byte/256-bit types per new direction):
+
+- claude-opus-4-5.headers.txt: Proposes documenting/structuring types 4,5,7 and 48-byte headers. This now conflicts with the direction to ignore all but types 0–3 and 32-byte headers. It also suggests splitting docs into many files; that overhead may be unnecessary given the reduced scope.
+- gemini.headers.txt: Largely aligned on types 0–2 but notes type 3 not implemented. Needs to drop all mention of types 4/5/7 and 48-byte headers and reinforce that type 3 is reserved/unused but still in the allowed set list.

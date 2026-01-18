@@ -1,0 +1,28 @@
+Updated plan (per new direction to keep only encryption types 0, 1, 2, 3; 32-byte headers only; ignore 48-byte/256-bit types):
+
+What to document (grounded in RAIDAX server code):
+- Types supported: 0 (none), 1 (AES), 2 (locker), 3 (reserved/unused). Server rejects unknown types; type 3 not implemented but may be called out as “not accepted/returns ERROR_INVALID_ENCRYPTION”.
+- Header bytes 0–15: unchanged common routing/presentation.
+- Header bytes 16–31 per type:
+  - Type 0: 16=0; 17–21 ignored; 22–23 body length; 24–29 ignored; 30–31 echo. Nonce zeroed server-side.
+  - Type 1: 16=1; 17=denom; 18–21=SN; 22–23 body length; 24–31 = 8-byte nonce where bytes 30–31 are also echo.
+  - Type 2: same layout as Type 1 (locker lookup for key).
+  - Type 3: reserved/unused; document as invalid/unsupported.
+- Body rules (types 0/1/2):
+  - Body starts with 16-byte challenge; bytes 12–15 are CRC32 of bytes 0–11.
+  - Type 0: challenge/CRC in plaintext.
+  - Types 1/2: challenge/CRC are inside ciphertext; decrypt first, then CRC check; CTR with 16-byte key (AN) and 8-byte nonce from header (rest zero).
+  - Terminator 0x3E3E is not encrypted for types 1/2.
+- Echo handling: For 0/1/2, echo read at bytes 30–31; for 1/2 these are simultaneously the last two nonce bytes.
+
+Planned doc changes:
+- In 01_Header_32_Byte.md, replace the single generic row for bytes 16–31 with the per-type breakdown above; explicitly call out the 8-byte nonce and echo overlap for types 1/2, and that type 0 ignores nonce.
+- Add clear note that challenge+CRC are required even for type 0.
+- Add a short note that type 3 is reserved/invalid; no body parsing beyond reporting ERROR_INVALID_ENCRYPTION.
+
+Python examples to include (one per type):
+- Type 0 builder: zero nonce, echo at 30–31, body length at 22–23, challenge+CRC prepended to payload, plaintext terminator.
+- Type 1 builder: fill denom/SN, body length at 22–23, 8-byte nonce (6 random + 2 echo), encrypt challenge+payload with AES-CTR (16-byte key), append plaintext terminator.
+- Type 2 builder: same as type 1 but clarify locker key source.
+
+Out of scope to document: 48-byte headers, AES-256 types (4/5), inter-RAIDA (7), or HMAC paths—per instruction to drop them as too confusing.

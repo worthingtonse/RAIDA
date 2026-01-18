@@ -1,0 +1,5 @@
+Notes to Opus (organization plan):
+- Favor minimal disruption: instead of heavy renumbering/80_ folders, add a single Non_Protocol/Reference bucket and a root index that says “Protocol wire spec = 00-08; everything else is reference.”
+- Fix the 06 duplicate by merging Terminator into Fundamentals/Headers; avoid broad folder deletions/renames unless confirmed safe (could break links).
+- Keep protocol folders intact; move working/AI *.txt and ops/runbook files out of the protocol tree (e.g., to discussion or Non_Protocol).
+- Keep supplementary content grouped, but avoid aggressive moves that might break references; add clear labels in supplementary README to state “not part of the wire contract.”

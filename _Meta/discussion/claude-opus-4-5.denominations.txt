@@ -1,0 +1,262 @@
+=============================================================================
+DENOMINATION DOCUMENTATION ANALYSIS - Claude Opus 4.5
+=============================================================================
+
+PROBLEM SUMMARY
+---------------
+The current denomination documentation is confusing for AI because:
+1. It uses SIGNED integers but shows hex codes without explaining two's complement
+2. The relationship between code and value (10^code) is not explicitly stated
+3. Fractional denominations (-7 to -3) have no names (marked with "?")
+4. The term "Satoshi" may confuse AI into thinking this is Bitcoin-related
+5. No explanation of WHY the system works this way (logarithmic/metric)
+6. The byte encoding is ambiguous (int8_t vs uint8_t confusion)
+
+=============================================================================
+ISSUE 1: SIGNED INTEGER ENCODING NOT EXPLAINED
+=============================================================================
+
+Current documentation shows:
+  Satoshi | 0xF8 | -8 | .0000-0001
+
+This is confusing because:
+- 0xF8 in hex looks like a large positive number (248)
+- But in the Decimal column it says -8
+- AI may not realize this is two's complement signed encoding
+
+RECOMMENDATION:
+Add explicit explanation that denomination is stored as a SIGNED 8-bit integer
+(int8_t), where:
+- 0xF8 through 0xFF represent -8 through -1 (two's complement)
+- 0x00 through 0x7F represent 0 through 127
+
+=============================================================================
+ISSUE 2: FORMULA NOT STATED
+=============================================================================
+
+The core formula is never explicitly stated:
+
+    token_value = 10 ^ denomination_code
+
+This is the KEY insight that makes the system work. Without this formula,
+AI cannot compute values or understand the pattern.
+
+RECOMMENDATION:
+State the formula prominently at the top:
+
+    The denomination code represents a power of 10.
+    Token Value = 10^code
+
+    Examples:
+    - Code -2 (0xFE): 10^-2 = 0.01 (one cent)
+    - Code 0 (0x00): 10^0 = 1 (one unit)
+    - Code 3 (0x03): 10^3 = 1000 (one thousand)
+
+=============================================================================
+ISSUE 3: MISSING NAMES FOR FRACTIONAL DENOMINATIONS
+=============================================================================
+
+Current documentation has "?" for denominations -7 through -3:
+
+    ?|0xF9 | -7 | .0000-001
+    ?|0xFa | -6 | .0000-01
+    ?|0xFb | -5 | .0000-1
+    ?|0xFc | -4 | .0001
+    ?|0xFd | -3 | .001
+
+RECOMMENDATION:
+Assign clear, memorable names. Suggested naming convention based on metric prefixes
+and common usage:
+
+| Code | Hex  | Name          | Value       | Metric Prefix |
+|------|------|---------------|-------------|---------------|
+| -8   | 0xF8 | Nano          | 0.00000001  | (sub-micro)   |
+| -7   | 0xF9 | Deci-Micro    | 0.0000001   | 10^-7         |
+| -6   | 0xFA | Micro         | 0.000001    | micro (u)     |
+| -5   | 0xFB | Deci-Milli    | 0.00001     | 10^-5         |
+| -4   | 0xFC | Basis Point   | 0.0001      | 10^-4         |
+| -3   | 0xFD | Milli / Mil   | 0.001       | milli (m)     |
+| -2   | 0xFE | Cent          | 0.01        | centi (c)     |
+| -1   | 0xFF | Dime / Deci   | 0.1         | deci (d)      |
+
+Alternative naming (more intuitive for currency):
+| Code | Name          | Meaning                    |
+|------|---------------|----------------------------|
+| -8   | Nano          | Smallest unit (like satoshi)|
+| -7   | Sub-Micro     | Ten nanos                  |
+| -6   | Micro         | One millionth              |
+| -5   | Half-Mil      | Ten micros                 |
+| -4   | Tick          | One basis point (0.01%)    |
+| -3   | Mil           | One thousandth             |
+| -2   | Cent          | One hundredth              |
+| -1   | Dime          | One tenth                  |
+
+=============================================================================
+ISSUE 4: "SATOSHI" NAME MAY CAUSE CONFUSION
+=============================================================================
+
+Using "Satoshi" for the smallest unit may confuse AI because:
+1. Satoshi is strongly associated with Bitcoin
+2. Bitcoin's satoshi is 10^-8 BTC, but this is a DIFFERENT system
+3. AI may incorrectly assume Bitcoin compatibility or semantics
+
+RECOMMENDATION:
+Either:
+A) Rename to "Nano" (metric prefix for 10^-9, close to 10^-8)
+B) Keep "Satoshi" but add explicit note: "Named after the concept of a
+   smallest indivisible unit, NOT related to Bitcoin"
+
+=============================================================================
+ISSUE 5: NO EXPLANATION OF WHY THIS SYSTEM
+=============================================================================
+
+AI benefits from understanding the RATIONALE:
+
+RECOMMENDATION:
+Add a "Design Rationale" section explaining:
+
+1. WHY LOGARITHMIC: A single signed byte can represent values from
+   0.00000001 to 1,000,000 (a range of 10^14) using only values -8 to +6.
+   Linear encoding would require many more bytes.
+
+2. WHY BASE 10: Metric system compatibility. All denominations are
+   multiples of 10, making conversion trivial (just add/subtract codes).
+
+3. WHY SIGNED: Allows fractional values (negative powers) and whole
+   values (positive powers) in a unified system.
+
+4. CONVERSION RULE: To convert between denominations:
+   - Moving UP one denomination = divide by 10 (or subtract 1 from code)
+   - Moving DOWN one denomination = multiply by 10 (or add 1 to code)
+   - Example: 100 Cents = 10 Dimes = 1 One (codes -2, -1, 0)
+
+=============================================================================
+ISSUE 6: BREAK/JOIN RULES NOT CLEAR
+=============================================================================
+
+The doc mentions coins can be "broke" or "joined" but doesn't explain the rules.
+
+RECOMMENDATION:
+Add explicit break/join rules:
+
+BREAK (Split a larger denomination into smaller):
+- 1 token of denomination N can become 10 tokens of denomination N-1
+- Example: 1 One (code 0) -> 10 Dimes (code -1)
+- Example: 1 Thousand (code 3) -> 10 Hundreds (code 2)
+
+JOIN (Combine smaller denominations into larger):
+- 10 tokens of denomination N can become 1 token of denomination N+1
+- Example: 10 Cents (code -2) -> 1 Dime (code -1)
+- Example: 10 Ones (code 0) -> 1 Ten (code 1)
+
+LIMITS:
+- Cannot break below denomination -8 (Nano/Satoshi)
+- Cannot join above denomination +6 (One Million)
+
+=============================================================================
+ISSUE 7: ENCODING IN PROTOCOL NOT CLEAR
+=============================================================================
+
+RECOMMENDATION:
+Add section on how denomination appears in protocol:
+
+IN REQUEST HEADER (for encryption key):
+- Byte 17: Denomination as signed int8_t
+- Bytes 18-21: Serial number as uint32_t big-endian
+
+IN COMMAND BODIES:
+- Denomination is always 1 byte, signed int8_t
+- Serial number is always 4 bytes, uint32_t big-endian
+
+ENCODING EXAMPLES:
+| Denomination | int8_t value | Byte value |
+|--------------|--------------|------------|
+| Nano (-8)    | -8           | 0xF8       |
+| Cent (-2)    | -2           | 0xFE       |
+| One (0)      | 0            | 0x00       |
+| Thousand (3) | 3            | 0x03       |
+| Million (6)  | 6            | 0x06       |
+
+=============================================================================
+RECOMMENDED REWRITE OF 00_Overview.md
+=============================================================================
+
+# Denominations
+
+## Core Concept
+
+The denomination system uses a **logarithmic encoding** where the denomination
+code represents a power of 10:
+
+```
+Token Value = 10 ^ denomination_code
+```
+
+This allows a single signed byte (-128 to +127) to represent an enormous range
+of values, from 0.00000001 to 10^127.
+
+## Encoding
+
+Denomination is stored as a **signed 8-bit integer (int8_t)**:
+
+| Code Range | Hex Range   | Meaning              |
+|------------|-------------|----------------------|
+| -8 to -1   | 0xF8 - 0xFF | Fractional values    |
+| 0          | 0x00        | One unit             |
+| 1 to 6     | 0x01 - 0x06 | Whole number values  |
+
+## Currency Denominations
+
+| Code | Hex  | Name        | Value         | Notes                |
+|------|------|-------------|---------------|----------------------|
+| -8   | 0xF8 | Nano        | 0.00000001    | Smallest unit        |
+| -7   | 0xF9 | Sub-Micro   | 0.0000001     |                      |
+| -6   | 0xFA | Micro       | 0.000001      |                      |
+| -5   | 0xFB | Half-Mil    | 0.00001       |                      |
+| -4   | 0xFC | Tick        | 0.0001        | Basis point          |
+| -3   | 0xFD | Mil         | 0.001         | Thousandth           |
+| -2   | 0xFE | Cent        | 0.01          | Hundredth            |
+| -1   | 0xFF | Dime        | 0.1           | Tenth                |
+| 0    | 0x00 | One         | 1             | Base unit            |
+| 1    | 0x01 | Ten         | 10            |                      |
+| 2    | 0x02 | Hundred     | 100           |                      |
+| 3    | 0x03 | Thousand    | 1,000         |                      |
+| 4    | 0x04 | Ten-K       | 10,000        |                      |
+| 5    | 0x05 | Hundred-K   | 100,000       |                      |
+| 6    | 0x06 | Million     | 1,000,000     | Largest unit         |
+
+## Conversion Formula
+
+To convert quantity Q from denomination A to denomination B:
+
+```
+new_quantity = Q * 10^(A - B)
+```
+
+Example: Convert 500 Cents to Ones
+- Cents = code -2, Ones = code 0
+- new_quantity = 500 * 10^(-2 - 0) = 500 * 0.01 = 5 Ones
+
+## Break and Join Rules
+
+**BREAK** (1 large -> 10 small):
+- 1 token of code N = 10 tokens of code N-1
+- Cannot break below code -8 (Nano)
+
+**JOIN** (10 small -> 1 large):
+- 10 tokens of code N = 1 token of code N+1
+- Cannot join above code +6 (Million)
+
+## Protocol Encoding
+
+In the RAIDA protocol, a coin is identified by:
+- 1 byte: Denomination (signed int8_t)
+- 4 bytes: Serial Number (uint32_t, big-endian)
+
+```
+Coin ID = [DN 1B][SN 4B] = 5 bytes total
+```
+
+=============================================================================
+END OF ANALYSIS
+=============================================================================

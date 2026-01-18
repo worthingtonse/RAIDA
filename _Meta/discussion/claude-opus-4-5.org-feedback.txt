@@ -1,0 +1,155 @@
+=============================================================================
+ORGANIZATION FEEDBACK - Claude Opus 4.5
+=============================================================================
+
+## Review of GPT-4.1's Proposal (gpt-4.1.organize.txt)
+
+**Strengths:**
+- Concise and to the point
+- Good suggestion for index pages with clear scope statement
+- Smart idea to tag non-protocol content in-doc when it must remain nearby
+- Emphasizes reducing duplication (which aligns with our CRC consolidation)
+
+**Issues:**
+
+1. **Too vague** - No concrete folder structure proposed. "Non_Protocol" folder
+   is mentioned but no mapping of which existing folders go where.
+
+2. **References non-existent content** - Mentions "crash/linker analyses,
+   service units, build env notes, ops runbooks" - these don't exist in the
+   current documentation. May be confusing the RAIDA docs with server code.
+
+3. **Doesn't address empty folders** - 10 empty legacy folders exist that
+   should be deleted. No mention of cleanup.
+
+4. **Doesn't address duplicate folder numbers** - Both 06_Denominations and
+   06_Terminator exist with same prefix number.
+
+5. **Missing detail on what IS protocol** - Lists "Requests, Responses,
+   Headers, Bodies, Algorithms, Denominations, Status Codes" but current
+   structure has 08_Networking which IS protocol (ports, UDP/TCP transport).
+
+-----------------------------------------------------------------------------
+
+## Review of Gemini's Proposal (gemini.organize.txt)
+
+**Strengths:**
+- Very detailed and well-structured proposal
+- Clear two-folder separation: Specification/ vs Reference/
+- _Meta/ folder for working files is a good idea
+- Detailed mapping table showing old->new locations
+- Clear instruction for AI: "parse /Specification exclusively for protocol"
+
+**Issues:**
+
+1. **CRITICAL: 11_File_Formats is NOT protocol**
+   Gemini puts `11_File_Formats/` into `Specification/03_Data_Formats/`.
+   This is WRONG. File formats (.bin, .json, .stack) define how tokens are
+   STORED ON DISK, not how they're transmitted on the wire. This is exactly
+   the kind of confusion we're trying to prevent.
+
+2. **CRITICAL: 14_Security is NOT protocol specification**
+   Threat model and security checklists are GUIDANCE, not wire format.
+   Putting it in Specification/ muddles the distinction.
+
+3. **00_Introduction arguably IS protocol context**
+   Moving glossary and architecture to Reference/ may be wrong. The glossary
+   defines protocol terminology. Architecture explains the 25-RAIDA design
+   which IS fundamental to the protocol (consensus rules, etc.).
+
+4. **Too disruptive** - Complete restructuring breaks ALL existing cross-
+   references between documents. Every link like `../07_Commands/` would break.
+
+5. **Doesn't address duplicate 06_ prefix** - Both 06_Denominations and
+   06_Terminator have same number.
+
+6. **Renumbers everything** - Changing from 00-15 numbering to new 01-05
+   numbering loses the familiar structure.
+
+-----------------------------------------------------------------------------
+
+## What I'm Updating in My Proposal
+
+After reviewing other models, I'm refining my approach:
+
+### Keeping from my original:
+- Minimal disruption (don't break cross-references)
+- 80_Supplementary/ folder for non-protocol content
+- Delete empty folders
+- Move working .txt files to discussion/
+
+### Adding based on feedback:
+
+1. **From GPT-4.1:** Add index/README at root with clear scope statement:
+   "Protocol wire format = folders 00-08. Supplementary = 80_Supplementary/"
+
+2. **From Gemini:** Add _Meta/ or use discussion/ for AI working files,
+   with suggestion to .gitignore them.
+
+3. **Addressing what others missed:**
+   - 11_File_Formats MUST go to supplementary (NOT protocol)
+   - 14_Security MUST go to supplementary (threat model, not wire format)
+   - 00_Introduction should STAY in protocol section (glossary is essential)
+
+### Revised folder classification:
+
+**PROTOCOL (stays in main tree):**
+- 00_Introduction/ (glossary defines protocol terms)
+- 01_Protocol_Fundamentals/
+- 02_Request_Headers/
+- 03_Response_Headers/
+- 04_Cryptography/
+- 05_Challenge_Response/
+- 06_Denominations/
+- 06_Terminator/ (RENAME to 05B_Terminator or merge)
+- 07_Commands/
+- 08_Networking/
+
+**SUPPLEMENTARY (move to 80_Supplementary/):**
+- 09_Client_Guide/ -> tutorial, not spec
+- 11_File_Formats/ -> disk storage, NOT wire format
+- 12_Algorithms/ -> helper references
+- 13_Logging/ -> best practices
+- 14_Security/ -> threat model, not wire format
+- 15_RFP/ -> project management
+
+**DELETE (empty):**
+- 02_Cryptography_and_Security/
+- 03_Networking_and_Transport/
+- 04_Command_Reference/
+- 05_Client_Implementation_Guide/
+- 06_Server_Implementation_Guide/
+- 07_Algorithms/
+- 10_Server_Guide/
+- 90_Diagrams/
+- 98_Data_and_Templates/
+- 99_Appendices/
+
+### Fix duplicate 06_ prefix:
+
+Option A: Rename 06_Terminator to 05B_Terminator
+Option B: Merge terminator docs into 01_Protocol_Fundamentals (it's just 2 bytes)
+Option C: Renumber: 06_Denominations -> 06, 06_Terminator -> 09 (after Networking)
+
+Recommend Option B - terminator is simple enough to merge.
+
+=============================================================================
+SUMMARY
+=============================================================================
+
+| Model | Main Issue |
+|-------|------------|
+| GPT-4.1 | Too vague, no concrete structure |
+| Gemini | Puts 11_File_Formats in Specification (WRONG - not wire format) |
+| Opus (me) | Original was good, adding index README from GPT-4.1's idea |
+
+Key insight from this review: The most important distinction is:
+- "What bytes go ON THE WIRE" = Protocol
+- "Everything else" = Supplementary
+
+11_File_Formats is the clearest example of something that looks protocol-ish
+but isn't - it defines disk storage, not network transmission.
+
+=============================================================================
+END OF FEEDBACK
+=============================================================================

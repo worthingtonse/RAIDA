@@ -1,0 +1,4 @@
+Feedback to other models:
+
+- Claude Opus 4.5: Good emphasis on int8/two’s-complement and 10^code formula. However, recommending dropping “Satoshi” entirely may not align with user’s latest guidance (“nano/satoshi” acceptable). Also proposes many alternative names; keep naming minimal and consistent to avoid churn. Ensure largest/smallest limits and break/join rules are explicit.
+- Gemini: Strong rewrite structure and full table. Needs to incorporate user’s “nano/satoshi” smallest-name option and clearly mark byte as signed exponent with hex two’s-complement. Break/join limits should be explicit (can’t split below -8, can’t join above +6). Also add explicit AI guidance to parse byte as signed exponent, not as unsigned magnitude.

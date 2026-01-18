@@ -1,58 +1,69 @@
-# RAIDA
-The Redundant Array of Independent Detection Agents is a server that detects if CloudCoins are authentic or counterfeit. Here are the major parts of the developent of the server. The RAIDA server has already been written in ['C' Langauage](https://github.com/worthingtonse/RAIDAX/tree/main/code)
+# RAIDA Protocol Documentation
 
-[Setup](README.md#setup) Preparing your developing environment
+The Redundant Array of Independent Detection Agents (RAIDA) protocol enables secure, distributed authentication of digital tokens across 25 independent servers.
 
-[Start Up](README.md#start-up) What happens when the server starts?
+## Documentation Structure
 
-[Athenticating Coins](README.md#authenticating-coins) 
+This documentation is organized into three main directories:
 
-[Backups](README.md#backups) Backing up data that has changed.
+```
+RAIDA/
+├── Specification/    <- Protocol wire format (THE CONTRACT)
+├── Reference/        <- Supplementary guides and materials
+└── _Meta/            <- Working files and collaboration notes
+```
 
-[SkyVault](README.md#skyvault) The first Bank with Data Supremacy
+### Specification/ (Protocol Contract)
 
-[Encryption](README.md#encryption) AES
+**The authoritative source for the RAIDA protocol wire format.**
 
-[Advanced Services](README.md#advanced-services)
+Use this directory exclusively when implementing client-server communication. It defines exactly what bytes are transmitted on the network.
 
-# Setup
-Before you can program, you will need to have your directory structures, config files, and data file ready. 
-* System Administrator: Your system admin is Fel and Miroch. They will do any System Administration jobs that you need done so you can concentrate on programming.
-* Repo: You may program on your computer but your repo will be put on a production server everyday. Otherwise you are welcome to program on the production server.
-* Directory structure: Found here: [Data Directory](https://github.com/worthingtonse/RAIDAX/blob/main/DATA%20DIRECTORY.MD#data-directory)
-* C Program: Amol is the programmer who created the same code in the ['C' Langauage](https://github.com/worthingtonse/RAIDAX/tree/main/code) His job is to help you understand the code. 
-* Repo: This is the Repo that code will be stored on. It will be private.
-* Testing: Testing tools have already been created and the server will be put into production so that errors can be detected. However, it is very important the the programmer be responsible for fully testing the code.
+| Directory | Contents |
+|-----------|----------|
+| `01_Fundamentals/` | Packet structure, byte order, networking |
+| `02_Request_Headers/` | 32-byte request header format |
+| `03_Response_Headers/` | Response format and status codes |
+| `04_Cryptography/` | AES-128-CTR, CRC32, challenge construction |
+| `05_Denominations/` | Token denomination encoding |
+| `06_Commands/` | All protocol commands by group |
 
-# Start Up
-The RAIDA goes through its process of initialization This takes about 10 minutes depending on the Server's harddrive. 
-1. Greeting: The program starts and greets the user.
-2. Configuration files: Config files are loaded: dns.bin, raida_no.txt, server.bin, shards.bin and version.txt
-3. Data files:  Data is loaded into RAM [Coin Files](https://github.com/worthingtonse/RAIDAX/blob/main/DATA%20DIRECTORY.MD#0-identification-coin-backup-files). 
-4. RAM Tables: All data is kept in RAM except for backups. [RAM Tables](https://github.com/worthingtonse/RAIDAX/blob/main/Data_Tables.MD).
+### Reference/ (Supplementary)
 
+Helpful guides and materials that are NOT part of the protocol specification.
 
-# Authenticating Coins
-The server listens to command that come from the client software. 
-1. UDP Listener: The server starts listening for client requests.
-2. RAIDA Protocol Headers: Create the standard [request header](https://github.com/worthingtonse/RAIDAX/blob/main/Request_Response_Headers.md).
-3. RAIDA Services: Create the services Echo and Version from the [Off Ledger Services](https://github.com/worthingtonse/RAIDAX/blob/main/OFF_LEDGER.md).
+| Directory | Contents |
+|-----------|----------|
+| `01_Introduction/` | Overview, glossary, architecture |
+| `02_Client_Guide/` | Implementation tutorials |
+| `03_File_Formats/` | Token disk storage formats |
+| `04_Algorithms/` | Helper algorithm implementations |
+| `05_Logging/` | Logging best practices |
+| `06_Security/` | Threat model and checklist |
+| `07_RFP/` | Requirements specification |
 
+### _Meta/
 
-# Backups
-The server must keep a log in RAM that tracks pages that have changed. Once enough pages have changed, the changes are written to file. 
-1. Backup Pages: The data in the RAM is divided into "pages" that each have 1024 records. If on of the records is changed, the page needs to be backup to hard drive. A RAM table called "Archive" trackes which pages need to be backed up and the backups happen from time to time when needed. 
+Working files from documentation development. Not part of the final documentation.
 
-# Skyvault 
-The Skyvault is a ledger-based bank that allows people to deposit, withdraw, transfer and do other bank functions. 
-1. Create the [skyvault services](https://github.com/worthingtonse/RAIDAX/blob/main/Skywallet.md#all-services).
-* RAM Tables: Load and backup additional tables. 
+## For AI Agents
 
-# Encryption
-The program will use AES encryption. 
-1. Implement the AES encryption on all services
+**Simple instruction:** The complete protocol specification is in `/Specification`. For implementation guidance, see `/Reference`.
 
-# Advanced Services
-1. Add the phase II services. 
-2. Add the logs and statistics services. 
+## Quick Start
 
+1. Read `Specification/01_Fundamentals/00_Packet_Structure.md`
+2. Study `Specification/02_Request_Headers/01_Header_32_Byte.md`
+3. Implement Echo command: `Specification/06_Commands/Group_0_Status/00_Echo.md`
+
+## Key Protocol Facts
+
+- All multi-byte integers: **Big-endian**
+- Packet terminator: **0x3E3E**
+- Encryption: **AES-128-CTR**
+- Consensus threshold: **13 of 25 RAIDA**
+- Denomination codes: **Signed 8-bit** (two's complement)
+
+## Related Resources
+
+- [RAIDA Server (C)](https://github.com/worthingtonse/RAIDAX/tree/main/code) - Reference server implementation

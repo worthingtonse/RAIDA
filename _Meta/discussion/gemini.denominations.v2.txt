@@ -1,0 +1,79 @@
+This file (v2) proposes a complete rewrite of the denomination documentation. It incorporates user feedback and ideas from other models to be as clear, unambiguous, and easily parsable as possible.
+
+## 1. Analysis of Current Documentation Issues
+
+The original `00_Overview.md` is highly confusing because it fails to explain the core concepts of the denomination system:
+- **Opaque Encoding:** It does not explain that the "Decimal Code" is a base-10 exponent or that the "Hex Code" is the signed 8-bit (`int8_t`) two's complement representation of that exponent.
+- **Missing Names & Context:** It lacks consistent names and fails to define the base currency or the formula for calculating a coin's value.
+
+## 2. Proposed New Documentation (Rewrite of `00_Overview.md`)
+
+---
+*(Start of proposed content)*
+
+# CloudCoin Denominations
+
+## Core Concept: A Metric Currency
+
+All CloudCoins exist in fixed amounts, called denominations, similar to physical coins and banknotes. The system is designed to be simple and scalable, like the metric system.
+
+- The base currency is the **CloudCoin (CC)**.
+- The smallest indivisible unit is the **Satoshi** (0.00000001 CC). All other denominations are integer multiples of the Satoshi.
+
+## Design Rationale: Why a Logarithmic System?
+
+Instead of assigning arbitrary IDs to each denomination, the system uses a **logarithmic encoding**. The Denomination ID is not just an identifier; it is the exponent in a formula. This "intelligent" ID system has several advantages:
+1.  **Efficiency:** A single signed byte can represent a vast range of values (from 1 Satoshi to 1 Million CC).
+2.  **Simplicity:** All conversions between denominations become simple addition or subtraction of their IDs.
+3.  **Scalability:** The base-10 system is familiar and easy to extend if ever needed.
+
+## Value Calculation Formula
+
+The value of any coin is determined by its Denomination ID. The ID is a **signed 8-bit integer (`int8_t`)** used as an exponent for base 10.
+
+**`Value in CloudCoins = 10 ^ (Denomination ID)`**
+
+### Examples:
+-   A coin with Denomination ID `2` has a value of `10^2 = 100` CloudCoins.
+-   A coin with Denomination ID `0` has a value of `10^0 = 1` CloudCoin.
+-   A coin with Denomination ID `-2` has a value of `10^-2 = 0.01` CloudCoins.
+
+When sent in the protocol, the signed `int8_t` ID is transmitted as a single byte. For negative IDs, this is their two's complement hex value (e.g., -2 is `0xFE`).
+
+## Master Denomination Table
+
+This table is the single source of truth for all currency denominations.
+
+| Proposed Name | Value in CloudCoins (CC) | Value in Satoshis | Denomination ID (`int8_t`) | Hex Representation (`uint8_t`) |
+| :--- | :--- | ---: | :---: | :---: |
+| 1-Million-CC | 1,000,000 | 100,000,000,000,000 | 6 | `0x06` |
+| 100-Thousand-CC| 100,000 | 10,000,000,000,000 | 5 | `0x05` |
+| 10-Thousand-CC | 10,000 | 1,000,000,000,000 | 4 | `0x04` |
+| 1-Thousand-CC | 1,000 | 100,000,000,000 | 3 | `0x03` |
+| 100-CloudCoin | 100 | 10,000,000,000 | 2 | `0x02` |
+| 10-CloudCoin | 10 | 1,000,000,000 | 1 | `0x01` |
+| 1-CloudCoin | 1 | 100,000,000 | 0 | `0x00` |
+| 10M-Satoshi | 0.1 | 10,000,000 | -1 | `0xFF` |
+| 1M-Satoshi (Centi-CC)| 0.01 | 1,000,000 | -2 | `0xFE` |
+| 100k-Satoshi (Milli-CC)| 0.001 | 100,000 | -3 | `0xFD` |
+| 10k-Satoshi | 0.0001 | 10,000 | -4 | `0xFC` |
+| 1k-Satoshi | 0.0001 | 1,000 | -5 | `0xFB` |
+| 100-Satoshi | 0.000001 | 100 | -6 | `0xFA` |
+| 10-Satoshi | 0.0000001 | 10 | -7 | `0xF9` |
+| 1-Satoshi | 0.00000001 | 1 | -8 | `0xF8` |
+
+## Making Change ("Break" and "Join")
+
+The metric nature of the denominations simplifies making change. A coin of a certain denomination can be "broken" into ten coins of the next lowest denomination.
+
+-   **Break Rule:** 1 coin of Denomination `N` = 10 coins of Denomination `N-1`.
+    -   *Example:* One **1-CloudCoin** (ID `0`) can be exchanged for ten **10M-Satoshi** coins (ID `-1`).
+-   **Join Rule:** 10 coins of Denomination `N` = 1 coin of Denomination `N+1`.
+    -   *Example:* Ten **1-CloudCoins** (ID `0`) can be joined to form one **10-CloudCoin** (ID `1`).
+
+**Limits:**
+-   The **1-Satoshi** coin (ID `-8`) is the smallest unit and cannot be broken further.
+-   The **1-Million-CC** coin (ID `6`) is the largest and cannot be joined further.
+
+---
+*(End of proposed content)*
